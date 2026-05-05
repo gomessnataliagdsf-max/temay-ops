@@ -185,6 +185,8 @@ tr:hover td{background:var(--green-dim2)}
 </head>
 <body>
 <div id="root"></div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
 <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
 <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
@@ -688,12 +690,21 @@ function SistemaEmpresa({ user, onLogout }) {
     { id: "origens", label: "Origens", perm: podeEditarOrigens, icon: IC.filter },
   ];
 
+  const tema = getEmpresaTema(empresaAtivaObj?.nome);
+
+  const temaStyle = tema ? {
+    "--bg": tema.bg, "--bg2": tema.bgCard, "--bg3": "#f1f5f9", "--bg4": "#e2e8f0",
+    "--border": tema.border, "--green": tema.primary, "--green2": tema.primaryDark,
+    "--green-dim": tema.primaryLight, "--green-dim2": tema.primaryLight + "80",
+    "--text": tema.text, "--text2": tema.text2, "--text3": tema.text3,
+  } : {};
+
   return (
-    <div className="app">
-      <aside className="sidebar">
+    <div className="app" style={temaStyle}>
+      <aside className="sidebar" style={tema ? { background: tema.bgSidebar, borderRight: `1px solid ${tema.border}` } : {}}>
         <div className="sidebar-logo">
           <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
-            <div style={{ fontFamily: "var(--font-head)", fontWeight: 900, fontSize: 16, color: "#fff" }}>HR<span style={{ color: "var(--green)" }}>S</span></div>
+            <div style={{ fontFamily: "var(--font-head)", fontWeight: 900, fontSize: 16, color: tema ? tema.primary : "#fff" }}>HR<span style={{ color: tema ? tema.primaryDark : "var(--green)" }}>S</span></div>
             <div>
               <div style={{ fontFamily: "var(--font-head)", fontWeight: 800, fontSize: 11, color: "var(--text)" }}>HRSystem</div>
               <div style={{ fontSize: 9, color: "var(--green)", fontWeight: 500, letterSpacing: ".04em" }}>Gestão de RH</div>
@@ -703,7 +714,10 @@ function SistemaEmpresa({ user, onLogout }) {
             <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
               {minhasEmpresas.map(e => {
                 const isAtiva = e.id === empresaAtiva;
-                const cor = "#9f7aea";
+                const nomeUp = (e.nome || "").toUpperCase();
+                const cor = nomeUp.includes("GRUPO DIGITAL") ? "#22c55e"
+                          : nomeUp.includes("NEWCORBAN") ? "#1e3a5f"
+                          : "#9f7aea";
                 return (
                   <div key={e.id} onClick={() => { setEmpresaAtiva(e.id); setData({ candidatos: [], vagas: [] }); }}
                     style={{ padding: "6px 10px", borderRadius: "var(--radius-sm)", cursor: "pointer", fontSize: 10, fontWeight: 700, background: isAtiva ? `${cor}22` : "var(--bg3)", border: `1px solid ${isAtiva ? cor : "var(--border)"}`, color: isAtiva ? cor : "var(--text2)", transition: "all .15s", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
@@ -772,25 +786,197 @@ function SistemaEmpresa({ user, onLogout }) {
 // DASHBOARD
 // ============================================================
 function DashboardEmp({ data, origens }) {
-  const [f1, setF1] = React.useState(""); const [f2, setF2] = React.useState("");
-  const [fRec, setFRec] = React.useState("Todos"); const [fOrig, setFOrig] = React.useState("Todas"); const [fVaga, setFVaga] = React.useState("Todas");
+  const [f1, setF1] = React.useState("");
+  const [f2, setF2] = React.useState("");
+  const [fRec, setFRec] = React.useState("Todos");
+  const [fOrig, setFOrig] = React.useState("Todas");
+  const [fVaga, setFVaga] = React.useState("Todas");
+  const [fPipeline, setFPipeline] = React.useState("Todos");
+  const chartRef = React.useRef(null);
+  const chartInstance = React.useRef(null);
+
   const recrutadores = [...new Set(data.candidatos.map(c => c.recrutador).filter(Boolean))];
   const vagasU = [...new Set(data.candidatos.map(c => c.vaga).filter(Boolean))];
   const nomesOrigens = origens.map(o => o.nome || o);
+  const statusOpts = ["Novo","Em Entrevista","Aprovado","Reprovado","Contratado","Desistente"];
+
   const filtrados = data.candidatos.filter(c => {
     const dOk = (!f1 || c.data >= f1) && (!f2 || c.data <= f2);
     const rOk = fRec === "Todos" || c.recrutador === fRec;
     const oOk = fOrig === "Todas" || (c.origem_contato || c.origem) === fOrig;
     const vOk = fVaga === "Todas" || c.vaga === fVaga;
-    return dOk && rOk && oOk && vOk;
+    const pOk = fPipeline === "Todos" || c.status === fPipeline;
+    return dOk && rOk && oOk && vOk && pOk;
   });
-  const temF = f1 || f2 || fRec !== "Todos" || fOrig !== "Todas" || fVaga !== "Todas";
-  const limpar = () => { setF1(""); setF2(""); setFRec("Todos"); setFOrig("Todas"); setFVaga("Todas"); };
+
+  const temF = f1 || f2 || fRec !== "Todos" || fOrig !== "Todas" || fVaga !== "Todas" || fPipeline !== "Todos";
+  const limpar = () => { setF1(""); setF2(""); setFRec("Todos"); setFOrig("Todas"); setFVaga("Todas"); setFPipeline("Todos"); };
+
   const total = filtrados.length;
   const aprov = filtrados.filter(c => c.status === "Aprovado" || c.status === "Contratado").length;
   const vagasAb = data.vagas.filter(v => v.status === "Aberta");
   const totalPosicoes = vagasAb.reduce((a, v) => a + (parseInt(v.vagas_abertas) || 1), 0);
   const taxa = total > 0 ? ((aprov / total) * 100).toFixed(1) : 0;
+  const hoje = new Date().toISOString().split("T")[0];
+  const entHoje = data.candidatos.filter(c => c.data_entrevista === hoje);
+  const recentes = [...filtrados].sort((a,b) => new Date(b.created_at||b.data) - new Date(a.created_at||a.data)).slice(0,6);
+
+  // Dados para o gráfico rosca
+  const statusCores = {
+    "Novo":"#9ea3ad","Em Entrevista":"#faa61a","Aprovado":"#9f7aea",
+    "Reprovado":"#f04747","Contratado":"#5865f2","Desistente":"#9b84ec"
+  };
+  const chartData = statusOpts.map(s => filtrados.filter(c => c.status === s).length);
+  const chartLabels = statusOpts;
+
+  // Gráfico Rosca com Chart.js
+  React.useEffect(() => {
+    if (!chartRef.current) return;
+    if (chartInstance.current) { chartInstance.current.destroy(); }
+    const ctx = chartRef.current.getContext("2d");
+    chartInstance.current = new Chart(ctx, {
+      type: "doughnut",
+      data: {
+        labels: chartLabels,
+        datasets: [{
+          data: chartData,
+          backgroundColor: Object.values(statusCores),
+          borderWidth: 2,
+          borderColor: "#21252e",
+          hoverOffset: 6,
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        cutout: "65%",
+        plugins: {
+          legend: {
+            position: "right",
+            labels: { color: "#e8eaf0", font: { size: 11, family: "Inter" }, padding: 12 }
+          },
+          tooltip: {
+            callbacks: {
+              label: (ctx) => {
+                const val = ctx.raw;
+                const pct = total > 0 ? ((val/total)*100).toFixed(1) : 0;
+                return ` ${val} candidatos (${pct}%)`;
+              }
+            }
+          }
+        }
+      }
+    });
+    return () => { if (chartInstance.current) chartInstance.current.destroy(); };
+  }, [filtrados.length, f1, f2, fRec, fOrig, fVaga, fPipeline]);
+
+  // Gerar PDF para diretoria
+  const gerarPDF = () => {
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
+    const hoje2 = new Date().toLocaleDateString("pt-BR");
+    const W = 210; let y = 20;
+
+    // Header
+    doc.setFillColor(31, 35, 46);
+    doc.rect(0, 0, W, 30, "F");
+    doc.setTextColor(255, 255, 255);
+    doc.setFontSize(20); doc.setFont("helvetica", "bold");
+    doc.text("HRSystem", 14, 18);
+    doc.setFontSize(10); doc.setFont("helvetica", "normal");
+    doc.text(`Relatório Dashboard · ${hoje2}`, 14, 26);
+    doc.setTextColor(159, 122, 234);
+    doc.text(`${total} candidatos`, W - 14, 22, { align: "right" });
+    y = 42;
+
+    // Filtros ativos
+    if (temF) {
+      doc.setFontSize(8); doc.setTextColor(100, 100, 100);
+      const filtrosTxt = [
+        f1 && `De: ${f1}`, f2 && `Até: ${f2}`,
+        fRec !== "Todos" && `Rec: ${fRec}`, fOrig !== "Todas" && `Origem: ${fOrig}`,
+        fVaga !== "Todas" && `Vaga: ${fVaga}`, fPipeline !== "Todos" && `Status: ${fPipeline}`,
+      ].filter(Boolean).join("  |  ");
+      doc.text(`Filtros: ${filtrosTxt}`, 14, y); y += 8;
+    }
+
+    // KPIs
+    const kpis = [
+      { l: "Total Candidatos", v: String(total) },
+      { l: "Vagas Abertas", v: String(vagasAb.length) },
+      { l: "Entrevistas Hoje", v: String(entHoje.length) },
+      { l: "Taxa Aprovação", v: `${taxa}%` },
+    ];
+    const kW = (W - 28) / 4;
+    kpis.forEach((k, i) => {
+      const x = 14 + i * (kW + 3);
+      doc.setFillColor(42, 47, 58);
+      doc.roundedRect(x, y, kW, 20, 2, 2, "F");
+      doc.setTextColor(159, 122, 234); doc.setFontSize(16); doc.setFont("helvetica", "bold");
+      doc.text(k.v, x + kW/2, y + 13, { align: "center" });
+      doc.setTextColor(140, 146, 165); doc.setFontSize(7); doc.setFont("helvetica", "normal");
+      doc.text(k.l, x + kW/2, y + 18, { align: "center" });
+    });
+    y += 30;
+
+    // Distribuição por status
+    doc.setFontSize(11); doc.setFont("helvetica", "bold"); doc.setTextColor(232, 234, 240);
+    doc.text("Distribuição por Status", 14, y); y += 7;
+    const statusCoresRGB = {
+      "Novo": [158,163,173], "Em Entrevista": [250,166,26],
+      "Aprovado": [159,122,234], "Reprovado": [240,71,71],
+      "Contratado": [88,101,242], "Desistente": [155,132,236]
+    };
+    statusOpts.forEach(s => {
+      const cnt = filtrados.filter(c => c.status === s).length;
+      if (cnt === 0) return;
+      const pct = total > 0 ? (cnt/total)*100 : 0;
+      const barW = ((W - 80) * pct) / 100;
+      const rgb = statusCoresRGB[s] || [150,150,150];
+      doc.setFontSize(8); doc.setTextColor(200, 200, 200);
+      doc.text(s, 14, y + 4);
+      doc.setFillColor(42, 47, 58);
+      doc.rect(60, y, W - 80, 6, "F");
+      doc.setFillColor(...rgb);
+      if (barW > 0) doc.rect(60, y, barW, 6, "F");
+      doc.setTextColor(232, 234, 240);
+      doc.text(`${cnt} (${pct.toFixed(1)}%)`, W - 14, y + 4.5, { align: "right" });
+      y += 9;
+    });
+    y += 6;
+
+    // Tabela candidatos recentes
+    doc.setFontSize(11); doc.setFont("helvetica", "bold"); doc.setTextColor(232, 234, 240);
+    doc.text("Candidatos Recentes", 14, y); y += 7;
+    // Header tabela
+    doc.setFillColor(42, 47, 58);
+    doc.rect(14, y, W - 28, 7, "F");
+    doc.setFontSize(7); doc.setTextColor(140, 146, 165);
+    doc.text("NOME", 17, y + 4.5);
+    doc.text("VAGA", 70, y + 4.5);
+    doc.text("ORIGEM", 115, y + 4.5);
+    doc.text("STATUS", 160, y + 4.5);
+    y += 8;
+    recentes.forEach((c, i) => {
+      if (i % 2 === 0) { doc.setFillColor(33, 37, 46); doc.rect(14, y-1, W-28, 7, "F"); }
+      doc.setFontSize(8); doc.setTextColor(232, 234, 240); doc.setFont("helvetica", "normal");
+      doc.text((c.nome || "").substring(0, 30), 17, y + 4);
+      doc.text((c.vaga || "-").substring(0, 25), 70, y + 4);
+      doc.text((c.origem_contato || c.origem || "-").substring(0, 20), 115, y + 4);
+      doc.setTextColor(159, 122, 234);
+      doc.text(c.status || "Novo", 160, y + 4);
+      y += 7;
+    });
+
+    // Footer
+    doc.setFillColor(31, 35, 46);
+    doc.rect(0, 282, W, 15, "F");
+    doc.setFontSize(8); doc.setTextColor(74, 81, 104);
+    doc.text(`HRSystem · Gerado em ${hoje2} · Confidencial`, W/2, 290, { align: "center" });
+
+    doc.save(`relatorio-dashboard-${hoje2.replace(/\//g,"-")}.pdf`);
+  };
+
   const funil = [
     { etapa: "Novo", count: filtrados.filter(c => c.status === "Novo").length, color: "#9ea3ad" },
     { etapa: "Entrevista", count: filtrados.filter(c => c.status === "Em Entrevista").length, color: "#faa61a" },
@@ -798,23 +984,43 @@ function DashboardEmp({ data, origens }) {
     { etapa: "Contratado", count: filtrados.filter(c => c.status === "Contratado").length, color: "#5865f2" },
   ];
   const maxF = Math.max(...funil.map(f => f.count), 1);
-  const hoje = new Date().toISOString().split("T")[0];
-  const entHoje = data.candidatos.filter(c => c.data_entrevista === hoje);
-  const recentes = [...filtrados].sort((a, b) => new Date(b.created_at || b.data) - new Date(a.created_at || a.data)).slice(0, 6);
 
   return (
     <>
+      {/* FILTROS */}
       <div className="filter-section">
-        <div className="filter-title"><I d={IC.filter} s={13}/>Filtros {temF && <span style={{ background: "var(--green-dim)", color: "var(--green)", fontSize: 9, padding: "1px 6px", borderRadius: 20, fontWeight: 700 }}>ATIVO</span>}</div>
+        <div className="filter-title">
+          <I d={IC.filter} s={13}/>Filtros
+          {temF && <span style={{ background: "var(--green-dim)", color: "var(--green)", fontSize: 9, padding: "1px 6px", borderRadius: 20, fontWeight: 700 }}>ATIVO</span>}
+        </div>
         <div className="filter-row">
           <input className="filter-input" type="date" value={f1} onChange={e => setF1(e.target.value)} style={{ maxWidth: 150 }}/>
           <input className="filter-input" type="date" value={f2} onChange={e => setF2(e.target.value)} style={{ maxWidth: 150 }}/>
-          <select className="filter-select" value={fRec} onChange={e => setFRec(e.target.value)}><option value="Todos">Todos Recrutadores</option>{recrutadores.map(r => <option key={r}>{r}</option>)}</select>
-          <select className="filter-select" value={fOrig} onChange={e => setFOrig(e.target.value)}><option value="Todas">Todas Origens</option>{nomesOrigens.map(o => <option key={o}>{o}</option>)}</select>
-          <select className="filter-select" value={fVaga} onChange={e => setFVaga(e.target.value)}><option value="Todas">Todas Vagas</option>{vagasU.map(v => <option key={v}>{v}</option>)}</select>
+          <select className="filter-select" value={fRec} onChange={e => setFRec(e.target.value)}>
+            <option value="Todos">Todos Recrutadores</option>
+            {recrutadores.map(r => <option key={r}>{r}</option>)}
+          </select>
+          <select className="filter-select" value={fOrig} onChange={e => setFOrig(e.target.value)}>
+            <option value="Todas">Todas Origens</option>
+            {nomesOrigens.map(o => <option key={o}>{o}</option>)}
+          </select>
+          <select className="filter-select" value={fVaga} onChange={e => setFVaga(e.target.value)}>
+            <option value="Todas">Todas Vagas</option>
+            {vagasU.map(v => <option key={v}>{v}</option>)}
+          </select>
+          <select className="filter-select" value={fPipeline} onChange={e => setFPipeline(e.target.value)}>
+            <option value="Todos">Todos Status</option>
+            {statusOpts.map(s => <option key={s}>{s}</option>)}
+          </select>
           {temF && <button className="btn-clear" onClick={limpar}>✕ Limpar</button>}
+          <button className="btn btn-excel" onClick={gerarPDF} style={{ marginLeft: "auto" }}>
+            <I d={IC.download} s={13}/>Exportar PDF
+          </button>
         </div>
+        {temF && <div style={{ fontSize: 11, color: "var(--text3)", marginTop: 7 }}>{total} candidato{total !== 1 ? "s" : ""} encontrado{total !== 1 ? "s" : ""}</div>}
       </div>
+
+      {/* KPIs */}
       <div className="kpi-grid">
         {[
           { label: "Candidatos", value: total, sub: temF ? "filtrados" : "no sistema", accent: "var(--green)" },
@@ -829,10 +1035,48 @@ function DashboardEmp({ data, origens }) {
           </div>
         ))}
       </div>
+
+      {/* GRÁFICO ROSCA + FUNIL */}
+      <div className="grid-2" style={{ marginBottom: 16 }}>
+        <div className="card">
+          <div className="card-header">
+            <span className="card-title">Distribuição por Status</span>
+            <span style={{ fontSize: 10, color: "var(--text3)" }}>{total} candidatos</span>
+          </div>
+          {total === 0 ? (
+            <div className="empty-state" style={{ padding: 30 }}>
+              <div style={{ fontSize: 28, marginBottom: 8 }}>📊</div>
+              <div style={{ fontSize: 12 }}>Sem dados para exibir</div>
+            </div>
+          ) : (
+            <div style={{ height: 220, position: "relative" }}>
+              <canvas ref={chartRef}/>
+            </div>
+          )}
+        </div>
+        <div className="card">
+          <div className="card-header"><span className="card-title">Funil de Seleção</span></div>
+          {funil.map(f => (
+            <div className="funil-step" key={f.etapa}>
+              <div className="funil-label">{f.etapa}</div>
+              <div className="funil-bar-wrap">
+                <div className="funil-bar" style={{ width: `${(f.count / maxF) * 100}%`, background: f.color }}>
+                  {f.count > 0 && <span>{f.count}</span>}
+                </div>
+              </div>
+              <div className="funil-count">{f.count}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* CANDIDATOS RECENTES + ENTREVISTAS HOJE */}
       <div className="grid-3-1">
         <div className="card">
           <div className="card-header"><span className="card-title">Candidatos Recentes</span></div>
-          {recentes.length === 0 ? <div className="empty-state" style={{ padding: 20 }}><div style={{ fontSize: 13 }}>Nenhum resultado</div></div> : (
+          {recentes.length === 0 ? (
+            <div className="empty-state" style={{ padding: 20 }}><div style={{ fontSize: 13 }}>Nenhum resultado</div></div>
+          ) : (
             <div className="table-wrap">
               <table>
                 <thead><tr><th>Candidato</th><th>Vaga</th><th>Origem</th><th>Status</th></tr></thead>
@@ -849,45 +1093,37 @@ function DashboardEmp({ data, origens }) {
           )}
         </div>
         <div className="card">
-          <div className="card-header"><span className="card-title">Funil</span></div>
-          {funil.map(f => (
-            <div className="funil-step" key={f.etapa}>
-              <div className="funil-label">{f.etapa}</div>
-              <div className="funil-bar-wrap"><div className="funil-bar" style={{ width: `${(f.count / maxF) * 100}%`, background: f.color }}>{f.count > 0 && <span>{f.count}</span>}</div></div>
-              <div className="funil-count">{f.count}</div>
+          <div className="card-header"><span className="card-title">Entrevistas Hoje</span></div>
+          {entHoje.length === 0 ? (
+            <div className="empty-state" style={{ padding: 20 }}>
+              <div style={{ fontSize: 28, marginBottom: 8 }}>📅</div>
+              <div style={{ fontSize: 12 }}>Nenhuma entrevista hoje</div>
+            </div>
+          ) : entHoje.map(c => (
+            <div className="entrevista-card" key={c.id}>
+              <div style={{ background: "var(--green-dim)", color: "var(--green)", borderRadius: "var(--radius-sm)", padding: "7px 10px", textAlign: "center", flexShrink: 0 }}>
+                <div style={{ fontFamily: "var(--font-head)", fontWeight: 800, fontSize: 14 }}>{c.horario_entrevista || "--:--"}</div>
+              </div>
+              <div className="avatar-sm">{ini(c.nome)}</div>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontWeight: 600, fontSize: 13 }}>{c.nome}</div>
+                <div style={{ fontSize: 11, color: "var(--text2)" }}>{c.vaga}</div>
+              </div>
             </div>
           ))}
-        </div>
-      </div>
-      <div className="grid-2">
-        <div className="card">
-          <div className="card-header"><span className="card-title">Entrevistas Hoje</span></div>
-          {entHoje.length === 0 ? <div className="empty-state" style={{ padding: 20 }}><div style={{ fontSize: 28, marginBottom: 8 }}>📅</div><div style={{ fontSize: 12 }}>Nenhuma entrevista hoje</div></div>
-            : entHoje.map(c => (
-              <div className="entrevista-card" key={c.id}>
-                <div style={{ background: "var(--green-dim)", color: "var(--green)", borderRadius: "var(--radius-sm)", padding: "7px 10px", textAlign: "center", flexShrink: 0 }}>
-                  <div style={{ fontFamily: "var(--font-head)", fontWeight: 800, fontSize: 14 }}>{c.horario_entrevista || "--:--"}</div>
+          <div style={{ marginTop: 14, borderTop: "1px solid var(--border)", paddingTop: 12 }}>
+            <div className="card-title" style={{ marginBottom: 10 }}>Vagas Abertas</div>
+            {vagasAb.slice(0, 4).map(v => (
+              <div key={v.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "6px 0", borderBottom: "1px solid var(--border)" }}>
+                <div>
+                  <div style={{ fontSize: 12, fontWeight: 600 }}>{v.titulo}</div>
+                  <div style={{ fontSize: 10, color: "var(--text2)" }}>{v.departamento || ""}</div>
                 </div>
-                <div className="avatar-sm">{ini(c.nome)}</div>
-                <div style={{ flex: 1 }}><div style={{ fontWeight: 600, fontSize: 13 }}>{c.nome}</div><div style={{ fontSize: 11, color: "var(--text2)" }}>{c.vaga}</div></div>
+                <span className="pill pill-green">{v.vagas_abertas || 1} vaga{(v.vagas_abertas||1) > 1 ? "s" : ""}</span>
               </div>
             ))}
-        </div>
-        <div className="card">
-          <div className="card-header"><span className="card-title">Vagas Abertas</span></div>
-          {vagasAb.slice(0, 5).map(v => (
-            <div key={v.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 0", borderBottom: "1px solid var(--border)" }}>
-              <div>
-                <div style={{ fontSize: 13, fontWeight: 600 }}>{v.titulo}</div>
-                <div style={{ fontSize: 11, color: "var(--text2)" }}>{v.departamento || ""}</div>
-              </div>
-              <div style={{ textAlign: "right" }}>
-                {v.salario && <div style={{ fontSize: 11, fontWeight: 700, color: "var(--green)" }}>{v.salario}</div>}
-                <span className="pill pill-green">{v.vagas_abertas || 1} posição</span>
-              </div>
-            </div>
-          ))}
-          {vagasAb.length === 0 && <div className="empty-state" style={{ padding: 20 }}><div style={{ fontSize: 12 }}>Nenhuma vaga aberta</div></div>}
+            {vagasAb.length === 0 && <div style={{ fontSize: 12, color: "var(--text3)", padding: "8px 0" }}>Nenhuma vaga aberta</div>}
+          </div>
         </div>
       </div>
     </>
@@ -1188,6 +1424,28 @@ function AgendaEmp({ data }) {
 // ============================================================
 // PIPELINE — etapas dinâmicas + migrar empresa/recrutador
 // ============================================================
+// ============================================================
+// TEMA POR EMPRESA
+// ============================================================
+function getEmpresaTema(nomeEmpresa) {
+  const n = (nomeEmpresa || "").toUpperCase();
+  if (n.includes("GRUPO DIGITAL")) return {
+    primary: "#22c55e", primaryDark: "#16a34a", primaryLight: "#dcfce7",
+    bg: "#ffffff", bgCard: "#f9fafb", bgSidebar: "#f0fdf4",
+    border: "#bbf7d0", text: "#111827", text2: "#374151", text3: "#6b7280",
+    badge: "#16a34a", badgeBg: "#dcfce7",
+    name: "grupo-digital"
+  };
+  if (n.includes("NEWCORBAN")) return {
+    primary: "#1e3a5f", primaryDark: "#0f2340", primaryLight: "#dbeafe",
+    bg: "#ffffff", bgCard: "#f8fafc", bgSidebar: "#eff6ff",
+    border: "#bfdbfe", text: "#0f172a", text2: "#1e3a5f", text3: "#64748b",
+    badge: "#1e3a5f", badgeBg: "#dbeafe",
+    name: "newcorban"
+  };
+  return null; // usa o tema dark padrão
+}
+
 const ETAPAS_FIXAS = [
   { nome: "Novo",          cor: "#9ea3ad" },
   { nome: "Em Entrevista", cor: "#faa61a" },
@@ -1616,9 +1874,6 @@ function ContratacaoModal({ candidato, empresaId, onFechar }) {
     setDocumentos(d => d.filter(x => x.id !== docId));
   };
 
-  // Atalho local que já passa form + onChange para o componente externo
-  const Campo = (props) => <CampoContratacao {...props} form={form} onChange={handleChange} />;
-
   return (
     <div className="modal-overlay" onClick={e => e.target === e.currentTarget && onFechar()}>
       <div className="modal" style={{ maxWidth: 680, width: "100%" }} onClick={e => e.stopPropagation()}>
@@ -1655,31 +1910,31 @@ function ContratacaoModal({ candidato, empresaId, onFechar }) {
               {/* Dados pessoais */}
               <div className="modal-section">📋 Dados Pessoais</div>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-                <Campo label="Data de Nascimento" name="data_nascimento" type="date"/>
-                <Campo label="RG" name="rg" placeholder="00.000.000-0"/>
-                <Campo label="CPF" name="cpf" placeholder="000.000.000-00"/>
-                <Campo label="PIS" name="pis" placeholder="000.00000.00-0"/>
-                <Campo label="PIX (chave)" name="pix" placeholder="CPF, e-mail ou telefone"/>
-                <Campo label="Nome do Responsável" name="nome_responsavel" placeholder="Nome completo"/>
-                <Campo label="Grau de Parentesco" name="grau_parentesco" placeholder="Ex: Mãe, Pai, Cônjuge..."/>
+                <CampoContratacao form={form} onChange={handleChange} label="Data de Nascimento" name="data_nascimento" type="date"/>
+                <CampoContratacao form={form} onChange={handleChange} label="RG" name="rg" placeholder="00.000.000-0"/>
+                <CampoContratacao form={form} onChange={handleChange} label="CPF" name="cpf" placeholder="000.000.000-00"/>
+                <CampoContratacao form={form} onChange={handleChange} label="PIS" name="pis" placeholder="000.00000.00-0"/>
+                <CampoContratacao form={form} onChange={handleChange} label="PIX (chave)" name="pix" placeholder="CPF, e-mail ou telefone"/>
+                <CampoContratacao form={form} onChange={handleChange} label="Nome do Responsável" name="nome_responsavel" placeholder="Nome completo"/>
+                <CampoContratacao form={form} onChange={handleChange} label="Grau de Parentesco" name="grau_parentesco" placeholder="Ex: Mãe, Pai, Cônjuge..."/>
               </div>
 
               {/* Dados responsável */}
               <div className="modal-section">👨‍👩‍👧 Dados do Responsável</div>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-                <Campo label="RG do Responsável" name="rg_responsavel" placeholder="00.000.000-0"/>
-                <Campo label="CPF do Responsável" name="cpf_responsavel" placeholder="000.000.000-00"/>
-                <Campo label="Email do Responsável" name="email_responsavel" type="email" placeholder="email@exemplo.com"/>
+                <CampoContratacao form={form} onChange={handleChange} label="RG do Responsável" name="rg_responsavel" placeholder="00.000.000-0"/>
+                <CampoContratacao form={form} onChange={handleChange} label="CPF do Responsável" name="cpf_responsavel" placeholder="000.000.000-00"/>
+                <CampoContratacao form={form} onChange={handleChange} label="Email do Responsável" name="email_responsavel" type="email" placeholder="email@exemplo.com"/>
               </div>
 
               {/* Dados contratuais */}
               <div className="modal-section">📝 Dados Contratuais</div>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-                <Campo label="Data de Início" name="data_inicio" type="date"/>
-                <Campo label="Remuneração (R$)" name="remuneracao" type="number" placeholder="0.00"/>
-                <Campo label="Unidade" name="unidade" placeholder="Nome da unidade"/>
-                <Campo label="Equipe" name="equipe" placeholder="Nome da equipe"/>
-                <Campo label="Benefícios" name="beneficios" type="textarea" placeholder="Vale-refeição, plano de saúde..." span2/>
+                <CampoContratacao form={form} onChange={handleChange} label="Data de Início" name="data_inicio" type="date"/>
+                <CampoContratacao form={form} onChange={handleChange} label="Remuneração (R$)" name="remuneracao" type="number" placeholder="0.00"/>
+                <CampoContratacao form={form} onChange={handleChange} label="Unidade" name="unidade" placeholder="Nome da unidade"/>
+                <CampoContratacao form={form} onChange={handleChange} label="Equipe" name="equipe" placeholder="Nome da equipe"/>
+                <CampoContratacao form={form} onChange={handleChange} label="Benefícios" name="beneficios" type="textarea" placeholder="Vale-refeição, plano de saúde..." span2/>
               </div>
 
               {/* Documentos */}
