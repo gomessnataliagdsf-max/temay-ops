@@ -1642,6 +1642,7 @@ function PipelineEmp({ data, setData, empresaId, allUsuarios, allEmpresas }) {
   // Etapas customizadas salvas no Supabase (tabela pipeline_etapas)
   const { etapasCustom, setEtapasCustom, todosStatus } = React.useContext(EtapasContext);
   const [novaEtapa, setNovaEtapa] = React.useState("");
+  const [corEtapa, setCorEtapa] = React.useState("#10d9a0");
   const [salvandoEtapa, setSalvandoEtapa] = React.useState(false);
   // Modal migração
   const [modalMigrar, setModalMigrar] = React.useState(null); // candidato selecionado
@@ -1655,7 +1656,7 @@ function PipelineEmp({ data, setData, empresaId, allUsuarios, allEmpresas }) {
   // Todas as etapas: fixas + customizadas
   const todasEtapas = [
     ...ETAPAS_FIXAS,
-    ...etapasCustom.map(e => ({ nome: e.nome, cor: COR_CUSTOM, id: e.id, custom: true }))
+    ...etapasCustom.map(e => ({ nome: e.nome, cor: e.cor || COR_CUSTOM, id: e.id, custom: true }))
   ];
   const todosNomes = todosStatus.length > 0 ? todosStatus : todasEtapas.map(e => e.nome);
 
@@ -1672,10 +1673,11 @@ function PipelineEmp({ data, setData, empresaId, allUsuarios, allEmpresas }) {
     const r = await fetch(`${SB_URL}/rest/v1/pipeline_etapas`, {
       method: "POST",
       headers: { "apikey": SB_KEY, "Authorization": `Bearer ${SB_KEY}`, "Content-Type": "application/json", "Prefer": "return=representation" },
-      body: JSON.stringify({ nome, empresa_id: empresaId || null })
+      body: JSON.stringify({ nome, cor: corEtapa, empresa_id: empresaId || null })
     }).then(r => r.json());
     if (Array.isArray(r) && r[0]) setEtapasCustom(prev => [...prev, r[0]]);
     setNovaEtapa("");
+    setCorEtapa("#10d9a0");
     setSalvandoEtapa(false);
   };
 
@@ -1731,15 +1733,39 @@ function PipelineEmp({ data, setData, empresaId, allUsuarios, allEmpresas }) {
             disabled={salvandoEtapa}
             style={{ maxWidth: 340 }}
           />
-          <button className="btn btn-primary" onClick={criarEtapa} disabled={!novaEtapa.trim() || salvandoEtapa}>
-            <I d={IC.plus} s={13}/>{salvandoEtapa ? "Salvando..." : "Criar Etapa"}
-          </button>
+          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+            {["#10d9a0","#5b6cf9","#faa61a","#f04747","#9f7aea","#3b82f6","#ec4899","#f97316","#14b8a6","#eab308"].map(c => (
+              <button
+                key={c}
+                onClick={() => setCorEtapa(c)}
+                title={c}
+                style={{
+                  width: 22, height: 22, borderRadius: "50%", border: corEtapa === c ? "3px solid #fff" : "2px solid transparent",
+                  background: c, cursor: "pointer", flexShrink: 0,
+                  boxShadow: corEtapa === c ? `0 0 0 2px ${c}` : "none", outline: "none", transition: "all .15s"
+                }}
+              />
+            ))}
+            <input
+              type="color"
+              value={corEtapa}
+              onChange={e => setCorEtapa(e.target.value)}
+              title="Cor personalizada"
+              style={{ width: 22, height: 22, borderRadius: "50%", border: "2px solid var(--border)", cursor: "pointer", padding: 0, background: "none" }}
+            />
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <div style={{ width: 12, height: 12, borderRadius: "50%", background: corEtapa, flexShrink: 0 }}/>
+            <button className="btn btn-primary" onClick={criarEtapa} disabled={!novaEtapa.trim() || salvandoEtapa} style={{ background: corEtapa, borderColor: corEtapa }}>
+              <I d={IC.plus} s={13}/>{salvandoEtapa ? "Salvando..." : "Criar Etapa"}
+            </button>
+          </div>
           {etapasCustom.length > 0 && (
             <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
               {etapasCustom.map(e => (
-                <span key={e.id} style={{ display: "inline-flex", alignItems: "center", gap: 5, background: `${COR_CUSTOM}20`, color: COR_CUSTOM, border: `1px solid ${COR_CUSTOM}40`, borderRadius: 20, padding: "3px 10px", fontSize: 11, fontWeight: 600 }}>
+                <span key={e.id} style={{ display: "inline-flex", alignItems: "center", gap: 5, background: `${e.cor || COR_CUSTOM}20`, color: e.cor || COR_CUSTOM, border: `1px solid ${e.cor || COR_CUSTOM}40`, borderRadius: 20, padding: "3px 10px", fontSize: 11, fontWeight: 600 }}>
                   {e.nome}
-                  <button onClick={() => excluirEtapa(e)} style={{ background: "none", border: "none", color: COR_CUSTOM, cursor: "pointer", fontSize: 14, lineHeight: 1, padding: 0 }}>×</button>
+                  <button onClick={() => excluirEtapa(e)} style={{ background: "none", border: "none", color: e.cor || COR_CUSTOM, cursor: "pointer", fontSize: 14, lineHeight: 1, padding: 0 }}>×</button>
                 </span>
               ))}
             </div>
