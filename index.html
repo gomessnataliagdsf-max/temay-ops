@@ -369,9 +369,7 @@ const STATUS_OPTS = ["Novo","Em Entrevista","Aprovado","Reprovado","Contratado",
 const TIPO_ENT_OPTS = ["Online (Google Meet)","Presencial","Telefone","WhatsApp"];
 const HORARIOS = ["08:00","08:30","09:00","09:30","10:00","10:30","11:00","11:30","12:00","13:00","13:30","14:00","14:30","15:00","15:30","16:00","16:30","17:00","17:30","18:00"];
 
-const SC_BASE = {"Novo":"#9ea3ad","Em Entrevista":"#faa61a","Aprovado":"#9f7aea","Reprovado":"#f04747","Contratado":"#5865f2","Desistente":"#9b84ec","Aberta":"#9f7aea","Pausada":"#faa61a","Encerrada":"#f04747"};
-window._corPorStatus = {};
-const SC = s => (window._corPorStatus && window._corPorStatus[s]) ? window._corPorStatus[s] : (SC_BASE[s] || "#9ea3ad");
+const SC = s => ({"Novo":"#9ea3ad","Em Entrevista":"#faa61a","Aprovado":"#9f7aea","Reprovado":"#f04747","Contratado":"#5865f2","Desistente":"#9b84ec","Aberta":"#9f7aea","Pausada":"#faa61a","Encerrada":"#f04747"}[s] || "#9ea3ad");
 const ini = (n = "") => n.split(" ").slice(0,2).map(x => x[0]).join("").toUpperCase();
 const limTel = t => t ? t.replace(/\D/g,"") : "";
 
@@ -827,8 +825,10 @@ function DashboardEmp({ data, origens }) {
   const recentes = [...filtrados].sort((a,b) => new Date(b.created_at||b.data) - new Date(a.created_at||a.data)).slice(0,6);
 
   // Dados para o gráfico rosca
-  const { todosStatus, corPorStatus, rgbPorStatus, todasEtapasComCor } = React.useContext(EtapasContext);
-  const statusCores = corPorStatus; // cores dinâmicas do pipeline
+  const statusCores = {
+    "Novo":"#9ea3ad","Em Entrevista":"#faa61a","Aprovado":"#9f7aea",
+    "Reprovado":"#f04747","Contratado":"#5865f2","Desistente":"#9b84ec"
+  };
   const chartData = statusOpts.map(s => filtrados.filter(c => c.status === s).length);
   const chartLabels = statusOpts;
 
@@ -843,7 +843,7 @@ function DashboardEmp({ data, origens }) {
         labels: chartLabels,
         datasets: [{
           data: chartData,
-          backgroundColor: statusOpts.map(s => corPorStatus[s] || "#9ea3ad"),
+          backgroundColor: Object.values(statusCores),
           borderWidth: 2,
           borderColor: "#21252e",
           hoverOffset: 6,
@@ -942,7 +942,11 @@ function DashboardEmp({ data, origens }) {
     y += 8;
 
     // ── GRÁFICO PIZZA (desenhado com arcos jsPDF) ──
-    // statusCoresRGB vem do contexto (rgbPorStatus)
+    const statusCoresRGB = {
+      "Novo":[158,163,173],"Em Entrevista":[250,166,26],
+      "Aprovado":[159,122,234],"Reprovado":[240,71,71],
+      "Contratado":[88,101,242],"Desistente":[155,132,236]
+    };
     const dadosPizza = statusOpts.map(s => ({
       label: s,
       count: filtrados.filter(c => c.status===s).length,
@@ -1011,9 +1015,9 @@ function DashboardEmp({ data, origens }) {
     y += 8;
 
     const dadosBarra = statusOpts.map(s => ({
-      label: s.length > 10 ? s.substring(0,9)+"." : s,
+      label: s.replace("Em Entrevista","Entrevista").replace("Desistente","Desist."),
       count: filtrados.filter(c=>c.status===s).length,
-      cor: statusCoresRGB[s] || [150,150,150]
+      cor: statusCoresRGB[s]||[150,150,150]
     }));
     const maxBarra = Math.max(...dadosBarra.map(d=>d.count), 1);
     const barH = 40; // altura máxima das barras
@@ -1084,13 +1088,12 @@ function DashboardEmp({ data, origens }) {
     doc.save(`relatorio-${hoje2.replace(/\//g,"-")}.pdf`);
   };
 
-    // Funil — usa cores do pipeline (inclui etapas customizadas)
-  const funil = todasEtapasComCor.map(e => ({
-    etapa: e.nome === "Em Entrevista" ? "Entrevista" : e.nome,
-    nome: e.nome,
-    count: filtrados.filter(c => c.status === e.nome).length,
-    color: e.cor
-  })).filter(f => f.count > 0 || ["Novo","Em Entrevista","Aprovado","Contratado"].includes(f.nome));
+    const funil = [
+    { etapa: "Novo", count: filtrados.filter(c => c.status === "Novo").length, color: "#9ea3ad" },
+    { etapa: "Entrevista", count: filtrados.filter(c => c.status === "Em Entrevista").length, color: "#faa61a" },
+    { etapa: "Aprovado", count: filtrados.filter(c => c.status === "Aprovado").length, color: "#9f7aea" },
+    { etapa: "Contratado", count: filtrados.filter(c => c.status === "Contratado").length, color: "#5865f2" },
+  ];
   const maxF = Math.max(...funil.map(f => f.count), 1);
 
   return (
@@ -1168,11 +1171,11 @@ function DashboardEmp({ data, origens }) {
             <div className="funil-step" key={f.etapa}>
               <div className="funil-label">{f.etapa}</div>
               <div className="funil-bar-wrap">
-                <div className="funil-bar" style={{ width: `${(f.count / maxF) * 100}%`, background: f.color, minWidth: f.count > 0 ? 24 : 0 }}>
+                <div className="funil-bar" style={{ width: `${(f.count / maxF) * 100}%`, background: f.color }}>
                   {f.count > 0 && <span>{f.count}</span>}
                 </div>
               </div>
-              <div className="funil-count" style={{ color: f.color, fontWeight: 700 }}>{f.count}</div>
+              <div className="funil-count">{f.count}</div>
             </div>
           ))}
         </div>
@@ -1242,8 +1245,8 @@ function DashboardEmp({ data, origens }) {
 // FORM CANDIDATO
 // ============================================================
 function FormCandidato({ candidato, vagas, candidatos, origens, onSalvar, onFechar }) {
-  const { todosStatus: etapasTodas } = React.useContext(EtapasContext);
-  const statusDisponiveis = etapasTodas.length > 0 ? etapasTodas : STATUS_OPTS;
+  const { todosStatus: _etapasForm } = React.useContext(EtapasContext);
+  const _statusForm = _etapasForm.length > 0 ? _etapasForm : STATUS_OPTS;
   const hoje = new Date().toISOString().split("T")[0];
   const INIT = { nome: "", email: "", telefone: "", vaga: "", origem_contato: "", perfil: "", recrutador: "", status: "Novo", tipo_entrevista: "", data_entrevista: "", horario_entrevista: "", data: hoje, link_meet: "", observacoes: "" };
   const [form, setForm] = React.useState(candidato ? {
@@ -1292,7 +1295,7 @@ function FormCandidato({ candidato, vagas, candidatos, origens, onSalvar, onFech
         </div>
         <div className="form-row">
           <div className="form-group"><label className="form-label">Perfil</label><input className="form-input" value={form.perfil} onChange={e => set("perfil", e.target.value)} placeholder="Júnior, Pleno, Sênior..."/></div>
-          <div className="form-group"><label className="form-label">Status</label><select className="form-input" value={form.status} onChange={e => set("status", e.target.value)}>{statusDisponiveis.map(s => <option key={s}>{s}</option>)}</select></div>
+          <div className="form-group"><label className="form-label">Status</label><select className="form-input" value={form.status} onChange={e => set("status", e.target.value)}>{_statusForm.map(s => <option key={s}>{s}</option>)}</select></div>
         </div>
         <div className="form-row">
           <div className="form-group"><label className="form-label">Recrutador</label><input className="form-input" value={form.recrutador} onChange={e => set("recrutador", e.target.value)} placeholder="Nome do recrutador"/></div>
@@ -1319,8 +1322,8 @@ function FormCandidato({ candidato, vagas, candidatos, origens, onSalvar, onFech
 // CANDIDATOS
 // ============================================================
 function CandidatosEmp({ data, setData, user, empresaId, origens, podeVerTudo }) {
-  const { todosStatus: etapasTodas } = React.useContext(EtapasContext);
-  const statusDisponiveis = etapasTodas.length > 0 ? etapasTodas : STATUS_OPTS;
+  const { todosStatus: _etapasCand } = React.useContext(EtapasContext);
+  const _statusCand = _etapasCand.length > 0 ? _etapasCand : STATUS_OPTS;
   const [modal, setModal] = React.useState(false);
   const [editando, setEditando] = React.useState(null);
   const [confirmDel, setConfirmDel] = React.useState(null);
@@ -1419,7 +1422,7 @@ function CandidatosEmp({ data, setData, user, empresaId, origens, podeVerTudo })
         <div className="filter-row">
           <div style={{ position: "relative", flex: 1, minWidth: 150 }}><span style={{ position: "absolute", left: 10, top: "50%", transform: "translateY(-50%)", color: "var(--text3)" }}><I d={IC.search} s={13}/></span><input className="filter-input" style={{ paddingLeft: 32 }} placeholder="Nome ou e-mail..." value={busca} onChange={e => setBusca(e.target.value)}/></div>
           <input className="filter-input" placeholder="Telefone..." value={fTel} onChange={e => setFTel(e.target.value)} style={{ maxWidth: 150 }}/>
-          <select className="filter-select" value={fStatus} onChange={e => setFStatus(e.target.value)}><option value="Todos">Todos Status</option>{statusDisponiveis.map(s => <option key={s}>{s}</option>)}</select>
+          <select className="filter-select" value={fStatus} onChange={e => setFStatus(e.target.value)}><option value="Todos">Todos Status</option>{_statusCand.map(s => <option key={s}>{s}</option>)}</select>
           <select className="filter-select" value={fOrigem} onChange={e => setFOrigem(e.target.value)}><option value="Todas">Todas Origens</option>{nomesOrigens.map(o => <option key={o}>{o}</option>)}</select>
           <select className="filter-select" value={fVaga} onChange={e => setFVaga(e.target.value)}><option value="Todas">Todas Vagas</option>{vagasU.map(v => <option key={v}>{v}</option>)}</select>
           {podeVerTudo && <select className="filter-select" value={fRec} onChange={e => setFRec(e.target.value)}><option value="Todos">Todos Recrutadores</option>{recrutadores.map(r => <option key={r}>{r}</option>)}</select>}
@@ -1625,35 +1628,13 @@ function EtapasProvider({ empresaId, children }) {
     }).then(r => r.json()).then(d => { if (Array.isArray(d)) setEtapasCustom(d); }).catch(() => {});
   }, [empresaId]);
 
-  // Sync global para SC() usar cores dinâmicas
-  React.useEffect(() => {
-    window._corPorStatus = corPorStatus;
-  });
-
-  const todasEtapasComCor = [
-    ...ETAPAS_FIXAS,
-    ...etapasCustom.map(e => ({ nome: e.nome, cor: e.cor || COR_CUSTOM }))
+  const todosStatus = [
+    ...ETAPAS_FIXAS.map(e => e.nome),
+    ...etapasCustom.map(e => e.nome)
   ];
 
-  const todosStatus = todasEtapasComCor.map(e => e.nome);
-
-  // Mapa nome -> cor para usar em qualquer componente
-  const corPorStatus = {};
-  todasEtapasComCor.forEach(e => { corPorStatus[e.nome] = e.cor; });
-
-  // Converte hex #rrggbb para [r,g,b] para jsPDF
-  const hexToRgb = (hex) => {
-    const r = parseInt(hex.slice(1,3),16);
-    const g = parseInt(hex.slice(3,5),16);
-    const b = parseInt(hex.slice(5,7),16);
-    return [r,g,b];
-  };
-
-  const rgbPorStatus = {};
-  todasEtapasComCor.forEach(e => { rgbPorStatus[e.nome] = hexToRgb(e.cor || COR_CUSTOM); });
-
   return (
-    <EtapasContext.Provider value={{ etapasCustom, setEtapasCustom, todosStatus, todasEtapasComCor, corPorStatus, rgbPorStatus }}>
+    <EtapasContext.Provider value={{ etapasCustom, setEtapasCustom, todosStatus }}>
       {children}
     </EtapasContext.Provider>
   );
@@ -1724,48 +1705,14 @@ function PipelineEmp({ data, setData, empresaId, allUsuarios, allEmpresas }) {
   const salvarMigracao = async () => {
     if (!modalMigrar) return;
     setSalvandoMigrar(true);
-    setMsgMigrar("");
-
-    const empresaDestino = migrarEmpresa && migrarEmpresa !== modalMigrar.empresa_id ? migrarEmpresa : null;
-    const recrutadorDestino = migrarRecrutador !== modalMigrar.recrutador ? migrarRecrutador : null;
-
-    if (!empresaDestino && !recrutadorDestino) {
-      setMsgMigrar("Nenhuma alteração feita.");
-      setSalvandoMigrar(false);
-      return;
-    }
-
-    try {
-      if (empresaDestino) {
-        // CÓPIA: cria novo candidato na empresa destino com recrutador escolhido
-        const { id: _id, created_at, criado_em, ...camposOriginais } = modalMigrar;
-        const novoCandidato = {
-          ...camposOriginais,
-          empresa_id: empresaDestino,
-          recrutador: recrutadorDestino || modalMigrar.recrutador || "",
-          status: "Novo",   // começa do zero na nova empresa
-          observacoes: `[Indicado de ${modalMigrar.empresa_id ? "outra unidade" : "tráfego"} — fora do perfil]
-${modalMigrar.observacoes || ""}`.trim(),
-        };
-        const r = await db.post("candidatos", novoCandidato);
-        if (Array.isArray(r) && r[0]) {
-          setMsgMigrar("✅ Cópia criada na empresa destino! O candidato original permanece aqui.");
-        } else {
-          setMsgMigrar("❌ Erro ao criar cópia. Tente novamente.");
-          setSalvandoMigrar(false);
-          return;
-        }
-      } else {
-        // Só mudou recrutador — atualiza na mesma empresa
-        await db.patch("candidatos", modalMigrar.id, { recrutador: recrutadorDestino });
-        setData(d => ({ ...d, candidatos: d.candidatos.map(c => c.id === modalMigrar.id ? { ...c, recrutador: recrutadorDestino } : c) }));
-        setMsgMigrar("✅ Recrutador atualizado!");
-      }
-    } catch(e) {
-      setMsgMigrar("❌ Erro na operação. Tente novamente.");
-    }
-
-    setTimeout(() => { setModalMigrar(null); setMsgMigrar(""); }, 2000);
+    const patch = {};
+    if (migrarEmpresa && migrarEmpresa !== modalMigrar.empresa_id) patch.empresa_id = migrarEmpresa;
+    if (migrarRecrutador !== modalMigrar.recrutador) patch.recrutador = migrarRecrutador;
+    if (Object.keys(patch).length === 0) { setMsgMigrar("Nenhuma alteração feita."); setSalvandoMigrar(false); return; }
+    await db.patch("candidatos", modalMigrar.id, patch);
+    setData(d => ({ ...d, candidatos: d.candidatos.map(c => c.id === modalMigrar.id ? { ...c, ...patch } : c) }));
+    setMsgMigrar("✅ Candidato migrado com sucesso!");
+    setTimeout(() => { setModalMigrar(null); setMsgMigrar(""); }, 1500);
     setSalvandoMigrar(false);
   };
 
@@ -1873,30 +1820,16 @@ ${modalMigrar.observacoes || ""}`.trim(),
         <div className="modal-overlay" onClick={() => setModalMigrar(null)}>
           <div className="modal" style={{ maxWidth: 420 }} onClick={e => e.stopPropagation()}>
             <div className="modal-header">
-              <span className="modal-title">📋 Copiar para outra Empresa</span>
+              <span className="modal-title">⇄ Migrar Candidato</span>
               <button className="modal-close" onClick={() => setModalMigrar(null)}>×</button>
             </div>
-
-            {/* Info do candidato */}
-            <div style={{ background: "var(--bg3)", border: "1px solid var(--border)", borderRadius: "var(--radius-sm)", padding: "10px 14px", marginBottom: 10 }}>
+            <div style={{ background: "var(--bg3)", border: "1px solid var(--border)", borderRadius: "var(--radius-sm)", padding: "10px 14px", marginBottom: 16 }}>
               <div style={{ fontWeight: 700, fontSize: 13 }}>{modalMigrar.nome}</div>
               <div style={{ fontSize: 11, color: "var(--text2)", marginTop: 2 }}>{modalMigrar.vaga} · Rec: {modalMigrar.recrutador || "—"}</div>
             </div>
 
-            {/* Aviso sobre cópia */}
-            <div style={{ background: "rgba(159,122,234,0.08)", border: "1px solid rgba(159,122,234,0.25)", borderRadius: "var(--radius-sm)", padding: "10px 14px", marginBottom: 14, display: "flex", gap: 10, alignItems: "flex-start" }}>
-              <span style={{ fontSize: 18, flexShrink: 0 }}>💡</span>
-              <div>
-                <div style={{ fontSize: 12, fontWeight: 700, color: "var(--green)", marginBottom: 3 }}>O candidato original permanece aqui</div>
-                <div style={{ fontSize: 11, color: "var(--text2)", lineHeight: 1.5 }}>
-                  Uma <strong style={{ color: "var(--text)" }}>cópia</strong> será criada na empresa destino com status <strong style={{ color: "var(--text)" }}>"Novo"</strong>. 
-                  Ideal para candidatos fora do perfil que podem servir para outra unidade.
-                </div>
-              </div>
-            </div>
-
             <div className="form-group">
-              <label className="form-label">Copiar para Empresa</label>
+              <label className="form-label">Migrar para Empresa</label>
               <select
                 className="form-input"
                 value={migrarEmpresa}
@@ -1940,7 +1873,7 @@ ${modalMigrar.observacoes || ""}`.trim(),
             <div className="modal-actions">
               <button className="btn btn-ghost" onClick={() => setModalMigrar(null)}>Cancelar</button>
               <button className="btn btn-primary" onClick={salvarMigracao} disabled={salvandoMigrar}>
-                {salvandoMigrar ? "Salvando..." : "📋 Criar Cópia na Empresa Destino"}
+                {salvandoMigrar ? "Salvando..." : "✓ Confirmar Migração"}
               </button>
             </div>
           </div>
