@@ -369,7 +369,9 @@ const STATUS_OPTS = ["Novo","Em Entrevista","Aprovado","Reprovado","Contratado",
 const TIPO_ENT_OPTS = ["Online (Google Meet)","Presencial","Telefone","WhatsApp"];
 const HORARIOS = ["08:00","08:30","09:00","09:30","10:00","10:30","11:00","11:30","12:00","13:00","13:30","14:00","14:30","15:00","15:30","16:00","16:30","17:00","17:30","18:00"];
 
-const SC = s => ({"Novo":"#9ea3ad","Em Entrevista":"#faa61a","Aprovado":"#9f7aea","Reprovado":"#f04747","Contratado":"#5865f2","Desistente":"#9b84ec","Aberta":"#9f7aea","Pausada":"#faa61a","Encerrada":"#f04747"}[s] || "#9ea3ad");
+const SC_FIXAS = {"Novo":"#9ea3ad","Em Entrevista":"#faa61a","Aprovado":"#9f7aea","Reprovado":"#f04747","Contratado":"#5865f2","Desistente":"#9b84ec","Aberta":"#9f7aea","Pausada":"#faa61a","Encerrada":"#f04747"};
+window._corCustom = {};
+const SC = s => window._corCustom[s] || SC_FIXAS[s] || "#9ea3ad";
 const ini = (n = "") => n.split(" ").slice(0,2).map(x => x[0]).join("").toUpperCase();
 const limTel = t => t ? t.replace(/\D/g,"") : "";
 
@@ -661,7 +663,10 @@ function SistemaEmpresa({ user, onLogout }) {
         setOrigens(o);
         setAllEmpresas(Array.isArray(emps) ? emps : []);
         setAllUsuarios(Array.isArray(usrs) ? usrs : []);
-        setEtapasCustom(Array.isArray(etapas) ? etapas : []);
+        const etapasArr = Array.isArray(etapas) ? etapas : [];
+        setEtapasCustom(etapasArr);
+        // Sync cores customizadas para SC() usar nos badges
+        etapasArr.forEach(e => { if(e.cor) window._corCustom[e.nome] = e.cor; });
       } catch (e) { console.error(e); }
       setLoading(false);
     }; load();
@@ -774,10 +779,13 @@ function SistemaEmpresa({ user, onLogout }) {
             <>
               {page === "dashboard" && (() => {
                 const _todasEtapas = [
-                  {nome:"Novo",cor:"#9ea3ad"},{nome:"Em Entrevista",cor:"#faa61a"},
-                  {nome:"Aprovado",cor:"#9f7aea"},{nome:"Reprovado",cor:"#f04747"},
-                  {nome:"Contratado",cor:"#5865f2"},{nome:"Desistente",cor:"#9b84ec"},
-                  ...etapasCustom.map(e => ({nome:e.nome, cor:e.cor||"#10d9a0"}))
+                  {nome:"Novo",cor:window._corCustom["Novo"]||"#9ea3ad"},
+                  {nome:"Em Entrevista",cor:window._corCustom["Em Entrevista"]||"#faa61a"},
+                  {nome:"Aprovado",cor:window._corCustom["Aprovado"]||"#9f7aea"},
+                  {nome:"Reprovado",cor:window._corCustom["Reprovado"]||"#f04747"},
+                  {nome:"Contratado",cor:window._corCustom["Contratado"]||"#5865f2"},
+                  {nome:"Desistente",cor:window._corCustom["Desistente"]||"#9b84ec"},
+                  ...etapasCustom.map(e => ({nome:e.nome, cor:e.cor||window._corCustom[e.nome]||"#10d9a0"}))
                 ];
                 const _corMap = {};
                 _todasEtapas.forEach(e => { _corMap[e.nome] = e.cor; });
@@ -1689,7 +1697,7 @@ function PipelineEmp({ data, setData, empresaId, allUsuarios, allEmpresas, onEta
       headers: { "apikey": SB_KEY, "Authorization": `Bearer ${SB_KEY}`, "Content-Type": "application/json", "Prefer": "return=representation" },
       body: JSON.stringify({ nome, cor: corEtapa, empresa_id: empresaId || null })
     }).then(r => r.json());
-    if (Array.isArray(r) && r[0]) { const novo = [...etapasCustom, r[0]]; setEtapasCustom(novo); if(onEtapasChange) onEtapasChange(novo); }
+    if (Array.isArray(r) && r[0]) { const novo = [...etapasCustom, r[0]]; setEtapasCustom(novo); if(r[0].cor) window._corCustom[r[0].nome]=r[0].cor; if(onEtapasChange) onEtapasChange(novo); }
     setNovaEtapa("");
     setCorEtapa("#10d9a0");
     setSalvandoEtapa(false);
@@ -1748,7 +1756,16 @@ function PipelineEmp({ data, setData, empresaId, allUsuarios, allEmpresas, onEta
             style={{ maxWidth: 340 }}
           />
           <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-            {["#10d9a0","#5b6cf9","#faa61a","#f04747","#9f7aea","#3b82f6","#ec4899","#f97316","#14b8a6","#eab308"].map(c => (
+            {[
+                "#10d9a0","#22c55e","#16a34a","#15803d",
+                "#5b6cf9","#3b82f6","#1d4ed8","#0ea5e9",
+                "#9f7aea","#a855f7","#ec4899","#f43f5e",
+                "#faa61a","#f97316","#eab308","#fb923c",
+                "#f04747","#dc2626","#14b8a6","#06b6d4",
+                "#64748b","#9ea3ad","#ffffff","#000000",
+                "#8b5cf6","#d946ef","#84cc16","#f59e0b",
+                "#6366f1","#0891b2"
+              ].map(c => (
               <button
                 key={c}
                 onClick={() => setCorEtapa(c)}
