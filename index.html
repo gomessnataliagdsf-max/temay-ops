@@ -313,31 +313,76 @@ const contratacoesService = {
     }
   },
   salvar: async (candidatoId, empresaId, form, documentos, contratacaoId) => {
+    // Campos seguros — só envia o que a tabela aceita
     const payload = {
-      ...form,
-      remuneracao: form.remuneracao ? parseFloat(form.remuneracao) : null,
-      data_nascimento: form.data_nascimento || null,
-      data_inicio: form.data_inicio || null,
-      documentos: documentos,
-      empresa_id: empresaId,
       candidato_id: candidatoId,
-      updated_at: new Date().toISOString()
+      empresa_id: empresaId,
+      updated_at: new Date().toISOString(),
+      documentos: documentos,
+      // Dados pessoais
+      data_nascimento: form.data_nascimento || null,
+      rg: form.rg || "",
+      cpf: form.cpf || "",
+      pis: form.pis || "",
+      pix: form.pix || "",
+      estado_civil: form.estado_civil || "",
+      // Endereço
+      cep: form.cep || "",
+      logradouro: form.logradouro || "",
+      numero: form.numero || "",
+      complemento: form.complemento || "",
+      bairro: form.bairro || "",
+      cidade: form.cidade || "",
+      estado: form.estado || "",
+      // Dependentes
+      dependentes: form.dependentes || "",
+      // Responsável
+      nome_responsavel: form.nome_responsavel || "",
+      grau_parentesco: form.grau_parentesco || "",
+      rg_responsavel: form.rg_responsavel || "",
+      cpf_responsavel: form.cpf_responsavel || "",
+      email_responsavel: form.email_responsavel || "",
+      // Contrato
+      data_inicio: form.data_inicio || null,
+      remuneracao: form.remuneracao ? parseFloat(form.remuneracao) : null,
+      beneficios: form.beneficios || "",
+      unidade: form.unidade || "",
+      equipe: form.equipe || "",
+      vale_transporte_ida: form.vale_transporte_ida ? parseFloat(form.vale_transporte_ida) : null,
+      vale_transporte_volta: form.vale_transporte_volta ? parseFloat(form.vale_transporte_volta) : null,
+      // Estrangeiro
+      is_estrangeiro: form.is_estrangeiro || false,
+      passaporte: form.passaporte || "",
+      pais_origem: form.pais_origem || "",
+      rne: form.rne || "",
+      visto_tipo: form.visto_tipo || "",
+      visto_validade: form.visto_validade || null,
     };
     try {
       if (contratacaoId) {
-        await fetch(`${SB_URL}/rest/v1/contratacoes?id=eq.${contratacaoId}`, {
+        const resp = await fetch(`${SB_URL}/rest/v1/contratacoes?id=eq.${contratacaoId}`, {
           method: "PATCH",
-          headers: { "apikey": SB_KEY, "Authorization": `Bearer ${SB_KEY}`, "Content-Type": "application/json" },
+          headers: { "apikey": SB_KEY, "Authorization": `Bearer ${SB_KEY}`, "Content-Type": "application/json", "Prefer": "return=representation" },
           body: JSON.stringify(payload)
         });
+        if (!resp.ok) {
+          const err = await resp.json();
+          console.error("[contratacoes.patch]", err);
+          return { id: null, erro: err.message || `Erro ${resp.status}` };
+        }
         return { id: contratacaoId, erro: null };
       } else {
-        const r = await fetch(`${SB_URL}/rest/v1/contratacoes`, {
+        const resp = await fetch(`${SB_URL}/rest/v1/contratacoes`, {
           method: "POST",
           headers: { "apikey": SB_KEY, "Authorization": `Bearer ${SB_KEY}`, "Content-Type": "application/json", "Prefer": "return=representation" },
           body: JSON.stringify(payload)
         });
-        const novo = await r.json();
+        if (!resp.ok) {
+          const err = await resp.json();
+          console.error("[contratacoes.post]", err);
+          return { id: null, erro: err.message || `Erro ${resp.status}` };
+        }
+        const novo = await resp.json();
         return { id: Array.isArray(novo) && novo[0] ? novo[0].id : null, erro: null };
       }
     } catch (e) {
@@ -369,9 +414,7 @@ const STATUS_OPTS = ["Novo","Em Entrevista","Aprovado","Reprovado","Contratado",
 const TIPO_ENT_OPTS = ["Online (Google Meet)","Presencial","Telefone","WhatsApp"];
 const HORARIOS = ["08:00","08:30","09:00","09:30","10:00","10:30","11:00","11:30","12:00","13:00","13:30","14:00","14:30","15:00","15:30","16:00","16:30","17:00","17:30","18:00"];
 
-const SC_FIXAS = {"Novo":"#9ea3ad","Em Entrevista":"#faa61a","Aprovado":"#9f7aea","Reprovado":"#f04747","Contratado":"#5865f2","Desistente":"#9b84ec","Aberta":"#9f7aea","Pausada":"#faa61a","Encerrada":"#f04747"};
-window._corCustom = {};
-const SC = s => window._corCustom[s] || SC_FIXAS[s] || "#9ea3ad";
+const SC = s => ({"Novo":"#9ea3ad","Em Entrevista":"#faa61a","Aprovado":"#9f7aea","Reprovado":"#f04747","Contratado":"#5865f2","Desistente":"#9b84ec","Aberta":"#9f7aea","Pausada":"#faa61a","Encerrada":"#f04747"}[s] || "#9ea3ad");
 const ini = (n = "") => n.split(" ").slice(0,2).map(x => x[0]).join("").toUpperCase();
 const limTel = t => t ? t.replace(/\D/g,"") : "";
 
@@ -663,10 +706,7 @@ function SistemaEmpresa({ user, onLogout }) {
         setOrigens(o);
         setAllEmpresas(Array.isArray(emps) ? emps : []);
         setAllUsuarios(Array.isArray(usrs) ? usrs : []);
-        const etapasArr = Array.isArray(etapas) ? etapas : [];
-        setEtapasCustom(etapasArr);
-        // Sync cores customizadas para SC() usar nos badges
-        etapasArr.forEach(e => { if(e.cor) window._corCustom[e.nome] = e.cor; });
+        setEtapasCustom(Array.isArray(etapas) ? etapas : []);
       } catch (e) { console.error(e); }
       setLoading(false);
     }; load();
@@ -779,13 +819,10 @@ function SistemaEmpresa({ user, onLogout }) {
             <>
               {page === "dashboard" && (() => {
                 const _todasEtapas = [
-                  {nome:"Novo",cor:window._corCustom["Novo"]||"#9ea3ad"},
-                  {nome:"Em Entrevista",cor:window._corCustom["Em Entrevista"]||"#faa61a"},
-                  {nome:"Aprovado",cor:window._corCustom["Aprovado"]||"#9f7aea"},
-                  {nome:"Reprovado",cor:window._corCustom["Reprovado"]||"#f04747"},
-                  {nome:"Contratado",cor:window._corCustom["Contratado"]||"#5865f2"},
-                  {nome:"Desistente",cor:window._corCustom["Desistente"]||"#9b84ec"},
-                  ...etapasCustom.map(e => ({nome:e.nome, cor:e.cor||window._corCustom[e.nome]||"#10d9a0"}))
+                  {nome:"Novo",cor:"#9ea3ad"},{nome:"Em Entrevista",cor:"#faa61a"},
+                  {nome:"Aprovado",cor:"#9f7aea"},{nome:"Reprovado",cor:"#f04747"},
+                  {nome:"Contratado",cor:"#5865f2"},{nome:"Desistente",cor:"#9b84ec"},
+                  ...etapasCustom.map(e => ({nome:e.nome, cor:e.cor||"#10d9a0"}))
                 ];
                 const _corMap = {};
                 _todasEtapas.forEach(e => { _corMap[e.nome] = e.cor; });
@@ -1697,7 +1734,7 @@ function PipelineEmp({ data, setData, empresaId, allUsuarios, allEmpresas, onEta
       headers: { "apikey": SB_KEY, "Authorization": `Bearer ${SB_KEY}`, "Content-Type": "application/json", "Prefer": "return=representation" },
       body: JSON.stringify({ nome, cor: corEtapa, empresa_id: empresaId || null })
     }).then(r => r.json());
-    if (Array.isArray(r) && r[0]) { const novo = [...etapasCustom, r[0]]; setEtapasCustom(novo); if(r[0].cor) window._corCustom[r[0].nome]=r[0].cor; if(onEtapasChange) onEtapasChange(novo); }
+    if (Array.isArray(r) && r[0]) { const novo = [...etapasCustom, r[0]]; setEtapasCustom(novo); if(onEtapasChange) onEtapasChange(novo); }
     setNovaEtapa("");
     setCorEtapa("#10d9a0");
     setSalvandoEtapa(false);
@@ -1756,16 +1793,7 @@ function PipelineEmp({ data, setData, empresaId, allUsuarios, allEmpresas, onEta
             style={{ maxWidth: 340 }}
           />
           <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-            {[
-                "#10d9a0","#22c55e","#16a34a","#15803d",
-                "#5b6cf9","#3b82f6","#1d4ed8","#0ea5e9",
-                "#9f7aea","#a855f7","#ec4899","#f43f5e",
-                "#faa61a","#f97316","#eab308","#fb923c",
-                "#f04747","#dc2626","#14b8a6","#06b6d4",
-                "#64748b","#9ea3ad","#ffffff","#000000",
-                "#8b5cf6","#d946ef","#84cc16","#f59e0b",
-                "#6366f1","#0891b2"
-              ].map(c => (
+            {["#10d9a0","#5b6cf9","#faa61a","#f04747","#9f7aea","#3b82f6","#ec4899","#f97316","#14b8a6","#eab308"].map(c => (
               <button
                 key={c}
                 onClick={() => setCorEtapa(c)}
@@ -2012,9 +2040,17 @@ function ContratacaoModal({ candidato, empresaId, onFechar }) {
 
   const FORM_VAZIO = {
     data_nascimento: "", rg: "", cpf: "", pis: "", pix: "",
+    estado_civil: "",
+    // Endereço
+    cep: "", logradouro: "", numero: "", complemento: "", bairro: "", cidade: "", estado: "",
+    // Dependentes
+    dependentes: "",
+    // Responsável
     nome_responsavel: "", grau_parentesco: "",
     rg_responsavel: "", cpf_responsavel: "", email_responsavel: "",
+    // Contrato
     data_inicio: "", remuneracao: "", beneficios: "", unidade: "", equipe: "",
+    vale_transporte_ida: "", vale_transporte_volta: "",
     // Documento estrangeiro
     is_estrangeiro: false,
     passaporte: "", pais_origem: "", rne: "", visto_tipo: "", visto_validade: "",
@@ -2049,11 +2085,22 @@ function ContratacaoModal({ candidato, empresaId, onFechar }) {
           rg_responsavel: existente.rg_responsavel || "",
           cpf_responsavel: existente.cpf_responsavel || "",
           email_responsavel: existente.email_responsavel || "",
+          estado_civil: existente.estado_civil || "",
+          cep: existente.cep || "",
+          logradouro: existente.logradouro || "",
+          numero: existente.numero || "",
+          complemento: existente.complemento || "",
+          bairro: existente.bairro || "",
+          cidade: existente.cidade || "",
+          estado: existente.estado || "",
+          dependentes: existente.dependentes || "",
           data_inicio: existente.data_inicio || "",
           remuneracao: existente.remuneracao ? String(existente.remuneracao) : "",
           beneficios: existente.beneficios || "",
           unidade: existente.unidade || "",
           equipe: existente.equipe || "",
+          vale_transporte_ida: existente.vale_transporte_ida ? String(existente.vale_transporte_ida) : "",
+          vale_transporte_volta: existente.vale_transporte_volta ? String(existente.vale_transporte_volta) : "",
           is_estrangeiro: existente.is_estrangeiro || false,
           passaporte: existente.passaporte || "",
           pais_origem: existente.pais_origem || "",
@@ -2155,10 +2202,46 @@ function ContratacaoModal({ candidato, empresaId, onFechar }) {
               <div className="modal-section">📋 Dados Pessoais</div>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
                 <CampoContratacao form={form} onChange={handleChange} label="Data de Nascimento" name="data_nascimento" type="date"/>
+                <div className="form-group">
+                  <label className="form-label">Estado Civil</label>
+                  <select className="form-input" name="estado_civil" value={form.estado_civil || ""} onChange={handleChange}>
+                    <option value="">Selecione</option>
+                    <option>Solteiro(a)</option>
+                    <option>Casado(a)</option>
+                    <option>Divorciado(a)</option>
+                    <option>Viúvo(a)</option>
+                    <option>União Estável</option>
+                    <option>Separado(a)</option>
+                  </select>
+                </div>
                 <CampoContratacao form={form} onChange={handleChange} label="RG" name="rg" placeholder="00.000.000-0"/>
                 <CampoContratacao form={form} onChange={handleChange} label="CPF" name="cpf" placeholder="000.000.000-00"/>
                 <CampoContratacao form={form} onChange={handleChange} label="PIS" name="pis" placeholder="000.00000.00-0"/>
                 <CampoContratacao form={form} onChange={handleChange} label="PIX (chave)" name="pix" placeholder="CPF, e-mail ou telefone"/>
+              </div>
+
+              {/* Endereço */}
+              <div className="modal-section">🏠 Endereço</div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                <CampoContratacao form={form} onChange={handleChange} label="CEP" name="cep" placeholder="00000-000"/>
+                <CampoContratacao form={form} onChange={handleChange} label="Número" name="numero" placeholder="Ex: 123"/>
+                <CampoContratacao form={form} onChange={handleChange} label="Logradouro" name="logradouro" placeholder="Rua, Av, Alameda..." span2/>
+                <CampoContratacao form={form} onChange={handleChange} label="Complemento" name="complemento" placeholder="Apto, Bloco..."/>
+                <CampoContratacao form={form} onChange={handleChange} label="Bairro" name="bairro" placeholder="Bairro"/>
+                <CampoContratacao form={form} onChange={handleChange} label="Cidade" name="cidade" placeholder="Cidade"/>
+                <CampoContratacao form={form} onChange={handleChange} label="Estado (UF)" name="estado" placeholder="Ex: SP"/>
+              </div>
+
+              {/* Dependentes */}
+              <div className="modal-section">👨‍👩‍👧‍👦 Dependentes</div>
+              <div className="form-group">
+                <label className="form-label">Dependentes (nome, parentesco e data de nascimento)</label>
+                <textarea className="form-textarea" name="dependentes" value={form.dependentes || ""} onChange={handleChange} rows={3} placeholder="Ex: João Silva - Filho - 10/05/2015&#10;Maria Silva - Cônjuge - 22/03/1990"/>
+              </div>
+
+              {/* Responsável */}
+              <div className="modal-section" style={{marginTop:4}}>👤 Contato do Responsável</div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
                 <CampoContratacao form={form} onChange={handleChange} label="Nome do Responsável" name="nome_responsavel" placeholder="Nome completo"/>
                 <CampoContratacao form={form} onChange={handleChange} label="Grau de Parentesco" name="grau_parentesco" placeholder="Ex: Mãe, Pai, Cônjuge..."/>
               </div>
@@ -2201,6 +2284,8 @@ function ContratacaoModal({ candidato, empresaId, onFechar }) {
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
                 <CampoContratacao form={form} onChange={handleChange} label="Data de Início" name="data_inicio" type="date"/>
                 <CampoContratacao form={form} onChange={handleChange} label="Remuneração (R$)" name="remuneracao" type="number" placeholder="0.00"/>
+                <CampoContratacao form={form} onChange={handleChange} label="Vale Transporte — Ida (R$)" name="vale_transporte_ida" type="number" placeholder="0.00"/>
+                <CampoContratacao form={form} onChange={handleChange} label="Vale Transporte — Volta (R$)" name="vale_transporte_volta" type="number" placeholder="0.00"/>
                 <CampoContratacao form={form} onChange={handleChange} label="Unidade" name="unidade" placeholder="Nome da unidade"/>
                 <CampoContratacao form={form} onChange={handleChange} label="Equipe" name="equipe" placeholder="Nome da equipe"/>
                 <CampoContratacao form={form} onChange={handleChange} label="Benefícios" name="beneficios" type="textarea" placeholder="Vale-refeição, plano de saúde..." span2/>
