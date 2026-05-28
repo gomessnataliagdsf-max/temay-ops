@@ -2476,9 +2476,15 @@ function UsuariosEmp({ empresaId, user, minhasEmpresas }) {
     const r = await db.post("sistema_usuarios", { ...form, ativo: true });
     if (Array.isArray(r) && r[0]) {
       const novoUser = r[0];
-      await fetch(`${SB_URL}/rest/v1/usuarios_empresas`, { method: "POST", headers: { "apikey": SB_KEY, "Authorization": `Bearer ${SB_KEY}`, "Content-Type": "application/json" }, body: JSON.stringify({ usuario_id: novoUser.id, empresa_id: empresaId }) });
+      // Vincula o novo usuário a TODAS as empresas que o criador tem acesso
+      const todasEmpresas = minhasEmpresas && minhasEmpresas.length > 0
+        ? minhasEmpresas.map(e => e.id)
+        : [empresaId];
+      await Promise.all(todasEmpresas.map(empId =>
+        fetch(`${SB_URL}/rest/v1/usuarios_empresas`, { method: "POST", headers: { "apikey": SB_KEY, "Authorization": `Bearer ${SB_KEY}`, "Content-Type": "application/json" }, body: JSON.stringify({ usuario_id: novoUser.id, empresa_id: empId }) })
+      ));
       setUsuarios(u => [novoUser, ...u]);
-      setVinculos(v => ({ ...v, [novoUser.id]: [empresaId] }));
+      setVinculos(v => ({ ...v, [novoUser.id]: todasEmpresas }));
     }
     setModal(false); setForm({ nome: "", email: "", login: "", senha_hash: "Temay@2025", perfil: "assistente" });
   };
