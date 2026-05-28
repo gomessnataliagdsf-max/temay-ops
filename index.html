@@ -822,6 +822,7 @@ function DashboardEmp({ data, origens, corPorStatus, todasEtapas }) {
   const vagasU = [...new Set(data.candidatos.map(c => c.vaga).filter(Boolean))];
   const nomesOrigens = origens.map(o => o.nome || o);
   const statusOpts = _etapas.map(e => e.nome);
+  const motivosDesistencia = [...new Set(data.candidatos.map(c => c.motivo_desistencia).filter(Boolean))];
 
   const filtrados = data.candidatos.filter(c => {
     const dOk = (!f1 || c.data >= f1) && (!f2 || c.data <= f2);
@@ -829,11 +830,12 @@ function DashboardEmp({ data, origens, corPorStatus, todasEtapas }) {
     const oOk = fOrig === "Todas" || (c.origem_contato || c.origem) === fOrig;
     const vOk = fVaga === "Todas" || c.vaga === fVaga;
     const pOk = fPipeline === "Todos" || c.status === fPipeline;
-    return dOk && rOk && oOk && vOk && pOk;
+    const mOk = fMotivo === "Todos" || c.motivo_desistencia === fMotivo;
+    return dOk && rOk && oOk && vOk && pOk && mOk;
   });
 
-  const temF = f1 || f2 || fRec !== "Todos" || fOrig !== "Todas" || fVaga !== "Todas" || fPipeline !== "Todos";
-  const limpar = () => { setF1(""); setF2(""); setFRec("Todos"); setFOrig("Todas"); setFVaga("Todas"); setFPipeline("Todos"); };
+  const temF = f1 || f2 || fRec !== "Todos" || fOrig !== "Todas" || fVaga !== "Todas" || fPipeline !== "Todos" || fMotivo !== "Todos";
+  const limpar = () => { setF1(""); setF2(""); setFRec("Todos"); setFOrig("Todas"); setFVaga("Todas"); setFPipeline("Todos"); setFMotivo("Todos"); };
 
   const total = filtrados.length;
   const aprov = filtrados.filter(c => c.status === "Aprovado" || c.status === "Contratado").length;
