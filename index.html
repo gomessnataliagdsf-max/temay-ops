@@ -359,7 +359,7 @@ const PERFIS = {
 };
 
 const PERMS = {
-  podeVerTudo: (p) => ["master","admin","coordenador"].includes(p),
+  podeVerTudo: (p) => ["master","admin","coordenador","assistente","auxiliar"].includes(p),
   podeGerenciarUsuarios: (p) => ["master","admin","coordenador"].includes(p),
   podeGerenciarVagas: (p) => ["master","admin","coordenador","assistente","auxiliar"].includes(p),
   podeGerenciarOrigens: (p) => ["master","admin","coordenador","assistente","auxiliar"].includes(p),
@@ -650,20 +650,24 @@ function SistemaEmpresa({ user, onLogout }) {
       try {
         if (!empId) { setLoading(false); return; }
         const filtroEmp = `&empresa_id=eq.${empId}`;
-        const [c, v, o, emps, usrs, etapas] = await Promise.all([
+        const [c, v, o, emps, etapas] = await Promise.all([
           db.get("candidatos", filtroEmp),
           db.get("vagas", filtroEmp),
           origensService.listar(empId),
           db.get("empresas", "&ativa=eq.true"),
-          db.get("sistema_usuarios", ""),
           fetch(`${SB_URL}/rest/v1/pipeline_etapas?select=*&order=created_at.asc`, {
             headers: { "apikey": SB_KEY, "Authorization": `Bearer ${SB_KEY}` }
           }).then(r => r.json()).then(d => Array.isArray(d) ? d : []).catch(() => [])
         ]);
+        // Busca apenas usuários vinculados à empresa ativa
+        const vincEmp = await fetch(`${SB_URL}/rest/v1/usuarios_empresas?empresa_id=eq.${empId}&select=usuario_id,sistema_usuarios(*)`, {
+          headers: { "apikey": SB_KEY, "Authorization": `Bearer ${SB_KEY}` }
+        }).then(r => r.json()).catch(() => []);
+        const usrs = Array.isArray(vincEmp) ? vincEmp.map(v => v.sistema_usuarios).filter(Boolean) : [];
         setData({ candidatos: Array.isArray(c) ? c : [], vagas: Array.isArray(v) ? v : [] });
         setOrigens(o);
         setAllEmpresas(Array.isArray(emps) ? emps : []);
-        setAllUsuarios(Array.isArray(usrs) ? usrs : []);
+        setAllUsuarios(usrs);
         setEtapasCustom(Array.isArray(etapas) ? etapas : []);
       } catch (e) { console.error(e); }
       setLoading(false);
@@ -2515,7 +2519,12 @@ function UsuariosEmp({ empresaId, user, minhasEmpresas }) {
     setUsuarios(us => us.map(x => x.id === u.id ? { ...x, ativo: !x.ativo } : x));
   };
 
-  const excluir = async (id) => { await db.delete("sistema_usuarios", id); setUsuarios(u => u.filter(x => x.id !== id)); setConfirmDel(null); };
+  const excluir = async (id) => {
+    // Desativa o usuário em vez de deletar — preserva candidatos e vagas cadastrados por ele
+    await db.patch("sistema_usuarios", id, { ativo: false });
+    setUsuarios(u => u.map(x => x.id === id ? { ...x, ativo: false } : x));
+    setConfirmDel(null);
+  };
 
   if (loading) return <div style={{ textAlign: "center", padding: 40, color: "var(--text2)" }}>Carregando...</div>;
 
