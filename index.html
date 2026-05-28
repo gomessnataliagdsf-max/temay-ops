@@ -313,76 +313,31 @@ const contratacoesService = {
     }
   },
   salvar: async (candidatoId, empresaId, form, documentos, contratacaoId) => {
-    // Campos seguros — só envia o que a tabela aceita
     const payload = {
-      candidato_id: candidatoId,
-      empresa_id: empresaId,
-      updated_at: new Date().toISOString(),
-      documentos: documentos,
-      // Dados pessoais
-      data_nascimento: form.data_nascimento || null,
-      rg: form.rg || "",
-      cpf: form.cpf || "",
-      pis: form.pis || "",
-      pix: form.pix || "",
-      estado_civil: form.estado_civil || "",
-      // Endereço
-      cep: form.cep || "",
-      logradouro: form.logradouro || "",
-      numero: form.numero || "",
-      complemento: form.complemento || "",
-      bairro: form.bairro || "",
-      cidade: form.cidade || "",
-      estado: form.estado || "",
-      // Dependentes
-      dependentes: form.dependentes || "",
-      // Responsável
-      nome_responsavel: form.nome_responsavel || "",
-      grau_parentesco: form.grau_parentesco || "",
-      rg_responsavel: form.rg_responsavel || "",
-      cpf_responsavel: form.cpf_responsavel || "",
-      email_responsavel: form.email_responsavel || "",
-      // Contrato
-      data_inicio: form.data_inicio || null,
+      ...form,
       remuneracao: form.remuneracao ? parseFloat(form.remuneracao) : null,
-      beneficios: form.beneficios || "",
-      unidade: form.unidade || "",
-      equipe: form.equipe || "",
-      vale_transporte_ida: form.vale_transporte_ida ? parseFloat(form.vale_transporte_ida) : null,
-      vale_transporte_volta: form.vale_transporte_volta ? parseFloat(form.vale_transporte_volta) : null,
-      // Estrangeiro
-      is_estrangeiro: form.is_estrangeiro || false,
-      passaporte: form.passaporte || "",
-      pais_origem: form.pais_origem || "",
-      rne: form.rne || "",
-      visto_tipo: form.visto_tipo || "",
-      visto_validade: form.visto_validade || null,
+      data_nascimento: form.data_nascimento || null,
+      data_inicio: form.data_inicio || null,
+      documentos: documentos,
+      empresa_id: empresaId,
+      candidato_id: candidatoId,
+      updated_at: new Date().toISOString()
     };
     try {
       if (contratacaoId) {
-        const resp = await fetch(`${SB_URL}/rest/v1/contratacoes?id=eq.${contratacaoId}`, {
+        await fetch(`${SB_URL}/rest/v1/contratacoes?id=eq.${contratacaoId}`, {
           method: "PATCH",
-          headers: { "apikey": SB_KEY, "Authorization": `Bearer ${SB_KEY}`, "Content-Type": "application/json", "Prefer": "return=representation" },
+          headers: { "apikey": SB_KEY, "Authorization": `Bearer ${SB_KEY}`, "Content-Type": "application/json" },
           body: JSON.stringify(payload)
         });
-        if (!resp.ok) {
-          const err = await resp.json();
-          console.error("[contratacoes.patch]", err);
-          return { id: null, erro: err.message || `Erro ${resp.status}` };
-        }
         return { id: contratacaoId, erro: null };
       } else {
-        const resp = await fetch(`${SB_URL}/rest/v1/contratacoes`, {
+        const r = await fetch(`${SB_URL}/rest/v1/contratacoes`, {
           method: "POST",
           headers: { "apikey": SB_KEY, "Authorization": `Bearer ${SB_KEY}`, "Content-Type": "application/json", "Prefer": "return=representation" },
           body: JSON.stringify(payload)
         });
-        if (!resp.ok) {
-          const err = await resp.json();
-          console.error("[contratacoes.post]", err);
-          return { id: null, erro: err.message || `Erro ${resp.status}` };
-        }
-        const novo = await resp.json();
+        const novo = await r.json();
         return { id: Array.isArray(novo) && novo[0] ? novo[0].id : null, erro: null };
       }
     } catch (e) {
@@ -644,7 +599,10 @@ function MasterDashboard({ onEntrarEmpresa, onLogout }) {
                           <td><div className="flex-center"><div className="avatar-sm">{ini(c.nome)}</div><div><div style={{ fontWeight: 600 }}>{c.nome}</div><div style={{ fontSize: 10, color: "var(--text3)" }}>{c.email || ""}</div></div></div></td>
                           <td style={{ fontSize: 11 }}>{c.vaga || "-"}</td>
                           <td style={{ fontSize: 11 }}>{c.recrutador || "-"}</td>
-                          <td><span className="badge" style={{ background: `${SC(c.status)}20`, color: SC(c.status) }}>{c.status || "Novo"}</span></td>
+                          <td><div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+                      <span className="badge" style={{ background: `${SC(c.status)}20`, color: SC(c.status) }}>{c.status || "Novo"}</span>
+                      {c.status === "Desistente" && c.motivo_desistencia && <span style={{ fontSize: 9, color: "var(--text3)", maxWidth: 100, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={c.motivo_desistencia}>{c.motivo_desistencia}</span>}
+                    </div></td>
                         </tr>
                       ))}</tbody>
                     </table>
@@ -856,6 +814,7 @@ function DashboardEmp({ data, origens, corPorStatus, todasEtapas }) {
   const [fOrig, setFOrig] = React.useState("Todas");
   const [fVaga, setFVaga] = React.useState("Todas");
   const [fPipeline, setFPipeline] = React.useState("Todos");
+  const [fMotivo, setFMotivo] = React.useState("Todos");
   const chartRef = React.useRef(null);
   const chartInstance = React.useRef(null);
 
@@ -1178,6 +1137,12 @@ function DashboardEmp({ data, origens, corPorStatus, todasEtapas }) {
             <option value="Todos">Todos Status</option>
             {statusOpts.map(s => <option key={s}>{s}</option>)}
           </select>
+          {motivosDesistencia.length > 0 && (
+            <select className="filter-select" value={fMotivo} onChange={e => setFMotivo(e.target.value)}>
+              <option value="Todos">Todos Motivos Desistência</option>
+              {motivosDesistencia.map(m => <option key={m}>{m}</option>)}
+            </select>
+          )}
           {temF && <button className="btn-clear" onClick={limpar}>✕ Limpar</button>}
           <button className="btn btn-excel" onClick={gerarPDF} style={{ marginLeft: "auto" }}>
             <I d={IC.download} s={13}/>Exportar PDF
@@ -1385,6 +1350,8 @@ function CandidatosEmp({ data, setData, user, empresaId, origens, podeVerTudo })
   const [busca, setBusca] = React.useState(""); const [fTel, setFTel] = React.useState("");
   const [fStatus, setFStatus] = React.useState("Todos"); const [fOrigem, setFOrigem] = React.useState("Todas"); const [fVaga, setFVaga] = React.useState("Todas");
   const [fRec, setFRec] = React.useState("Todos");
+  const [modalDesistencia, setModalDesistencia] = React.useState(null); // candidato pendente
+  const [motivoDesistencia, setMotivoDesistencia] = React.useState("");
   const recrutadores = [...new Set(data.candidatos.map(c => c.recrutador).filter(Boolean))];
   const nomesOrigens = origens.map(o => o.nome || o);
 
@@ -1401,8 +1368,8 @@ function CandidatosEmp({ data, setData, user, empresaId, origens, podeVerTudo })
   const temF = busca || fTel || fStatus !== "Todos" || fOrigem !== "Todas" || fVaga !== "Todas" || fRec !== "Todos";
   const limpar = () => { setBusca(""); setFTel(""); setFStatus("Todos"); setFOrigem("Todas"); setFVaga("Todas"); setFRec("Todos"); };
 
-  const salvar = async (form) => {
-    const item = { nome: form.nome || "", email: form.email || "", vaga: form.vaga || "", telefone: form.telefone || "", status: form.status || "Novo", perfil: form.perfil || "", recrutador: form.recrutador || "", origem_contato: form.origem_contato || "", tipo_entrevista: form.tipo_entrevista || "", data_entrevista: form.data_entrevista || null, horario_entrevista: form.horario_entrevista || "", link_meet: form.link_meet || "", observacoes: form.observacoes || "", data: form.data || null, empresa_id: empresaId };
+  const salvar = async (form, motivo_desistencia_extra) => {
+    const item = { nome: form.nome || "", email: form.email || "", vaga: form.vaga || "", telefone: form.telefone || "", status: form.status || "Novo", perfil: form.perfil || "", recrutador: form.recrutador || "", origem_contato: form.origem_contato || "", tipo_entrevista: form.tipo_entrevista || "", data_entrevista: form.data_entrevista || null, horario_entrevista: form.horario_entrevista || "", link_meet: form.link_meet || "", observacoes: form.observacoes || "", data: form.data || null, empresa_id: empresaId, motivo_desistencia: motivo_desistencia_extra || form.motivo_desistencia || "" };
     if (editando) {
       await db.patch("candidatos", editando, item);
       setData(d => ({ ...d, candidatos: d.candidatos.map(c => c.id === editando ? { ...c, ...item } : c) }));
@@ -1424,6 +1391,15 @@ function CandidatosEmp({ data, setData, user, empresaId, origens, podeVerTudo })
       await fetch(`${SB_URL}/rest/v1/contratacoes`, { method: "POST", headers: { "apikey": SB_KEY, "Authorization": `Bearer ${SB_KEY}`, "Content-Type": "application/json", "Prefer": "return=representation" }, body: JSON.stringify({ candidato_id: candidato.id, empresa_id: empresaId }) });
     }
     setData(d => ({ ...d, candidatos: d.candidatos.map(c => c.id === candidato.id ? { ...c, status: "Contratado" } : c) }));
+  };
+
+  const confirmarDesistencia = async () => {
+    if (!modalDesistencia) return;
+    const item = { status: "Desistente", motivo_desistencia: motivoDesistencia };
+    await db.patch("candidatos", modalDesistencia.id, item);
+    setData(d => ({ ...d, candidatos: d.candidatos.map(c => c.id === modalDesistencia.id ? { ...c, ...item } : c) }));
+    setModalDesistencia(null);
+    setMotivoDesistencia("");
   };
 
   const exportCSV = () => {
@@ -1509,7 +1485,50 @@ function CandidatosEmp({ data, setData, user, empresaId, origens, podeVerTudo })
           </div>
         )}
       </div>
-      {modal && <FormCandidato candidato={editando ? data.candidatos.find(c => c.id === editando) : null} vagas={data.vagas} candidatos={data.candidatos} origens={origens} onSalvar={salvar} onFechar={() => { setModal(false); setEditando(null); }}/>}
+      {modal && <FormCandidato
+              candidato={editando ? data.candidatos.find(c => c.id === editando) : null}
+              vagas={data.vagas} candidatos={data.candidatos} origens={origens}
+              onSalvar={(form) => {
+                if (form.status === "Desistente") {
+                  setModalDesistencia({ ...form, id: editando });
+                  setMotivoDesistencia(form.motivo_desistencia || "");
+                  setModal(false); setEditando(null);
+                } else { salvar(form); }
+              }}
+              onFechar={() => { setModal(false); setEditando(null); }}
+            />}
+            {modalDesistencia && (
+              <div className="modal-overlay" onClick={() => setModalDesistencia(null)}>
+                <div className="modal" style={{ maxWidth: 420 }} onClick={e => e.stopPropagation()}>
+                  <div className="modal-header">
+                    <span className="modal-title">😔 Motivo da Desistência</span>
+                    <button className="modal-close" onClick={() => setModalDesistencia(null)}>×</button>
+                  </div>
+                  <div style={{ background: "var(--bg3)", border: "1px solid var(--border)", borderRadius: "var(--radius-sm)", padding: "10px 14px", marginBottom: 14 }}>
+                    <div style={{ fontWeight: 700, fontSize: 13 }}>{modalDesistencia.nome}</div>
+                    <div style={{ fontSize: 11, color: "var(--text2)", marginTop: 2 }}>{modalDesistencia.vaga}</div>
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label">Por que o candidato desistiu? *</label>
+                    <select className="form-input" value={motivoDesistencia} onChange={e => setMotivoDesistencia(e.target.value)} style={{ marginBottom: 8 }}>
+                      <option value="">Selecione um motivo</option>
+                      <option>Aceitou outra proposta</option>
+                      <option>Salário abaixo da expectativa</option>
+                      <option>Distância/localização</option>
+                      <option>Mudança de planos pessoais</option>
+                      <option>Não compareceu</option>
+                      <option>Desistiu sem informar motivo</option>
+                      <option>Outro</option>
+                    </select>
+                    <textarea className="form-textarea" value={motivoDesistencia} onChange={e => setMotivoDesistencia(e.target.value)} placeholder="Descreva o motivo da desistência..." rows={3}/>
+                  </div>
+                  <div className="modal-actions">
+                    <button className="btn btn-ghost" onClick={() => { salvar({...modalDesistencia, status:"Desistente"}, ""); setModalDesistencia(null); }}>Pular</button>
+                    <button className="btn btn-danger" onClick={confirmarDesistencia} disabled={!motivoDesistencia.trim()}>Confirmar Desistência</button>
+                  </div>
+                </div>
+              </div>
+            )}
       {confirmDel && (
         <div className="modal-overlay" onClick={() => setConfirmDel(null)}>
           <div className="modal" style={{ maxWidth: 340 }} onClick={e => e.stopPropagation()}>
@@ -1556,6 +1575,7 @@ function VagasEmp({ data, setData, empresaId }) {
             <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8 }}><div><div style={{ fontFamily: "var(--font-head)", fontWeight: 700, fontSize: 14 }}>{v.titulo || "-"}</div><div style={{ fontSize: 12, color: "var(--text2)", marginTop: 2 }}>{v.departamento || ""}</div></div><span className="badge" style={{ background: `${SC(v.status)}20`, color: SC(v.status) }}>{v.status}</span></div>
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 8 }}><span style={{ fontSize: 11, color: "var(--text2)" }}>{v.tipo}</span><span style={{ fontSize: 11, color: prioColor[v.prioridade], fontWeight: 600 }}>{v.prioridade}</span>{v.recrutador && <span style={{ fontSize: 11, color: "var(--text2)" }}>· {v.recrutador}</span>}</div>
             {v.salario && <div style={{ fontSize: 13, fontWeight: 700, color: "var(--green)", marginTop: 8 }}>{v.salario}</div>}
+            {v.motivo_abertura && <div style={{ fontSize: 10, color: "var(--text3)", marginTop: 4, display: "flex", alignItems: "center", gap: 4 }}><span>📌</span>{v.motivo_abertura}</div>}
             <div style={{ display: "flex", gap: 8, marginTop: 12 }}><button className="btn btn-ghost btn-sm" onClick={() => abrirEditar(v)} style={{ flex: 1, justifyContent: "center" }}><I d={IC.edit} s={12}/>Editar</button><button className="btn btn-danger btn-sm" onClick={() => setConfirmDel(v)}><I d={IC.trash} s={12}/></button></div>
           </div>
         ))}
@@ -1570,6 +1590,21 @@ function VagasEmp({ data, setData, empresaId }) {
             <div className="form-row"><div className="form-group"><label className="form-label">Tipo</label><select className="form-input" value={form.tipo} onChange={e => set("tipo", e.target.value)}>{["CLT","PJ","Estágio","Freelance","Temporário"].map(t => <option key={t}>{t}</option>)}</select></div><div className="form-group"><label className="form-label">Qtd. Posições</label><input className="form-input" type="number" min="1" value={form.vagas_abertas} onChange={e => set("vagas_abertas", e.target.value)}/></div></div>
             <div className="form-row"><div className="form-group"><label className="form-label">Salário</label><input className="form-input" value={form.salario} onChange={e => set("salario", e.target.value)} placeholder="R$ 4.500"/></div><div className="form-group"><label className="form-label">Prioridade</label><select className="form-input" value={form.prioridade} onChange={e => set("prioridade", e.target.value)}>{["Alta","Média","Baixa"].map(p => <option key={p}>{p}</option>)}</select></div></div>
             <div className="form-group"><label className="form-label">Status</label><select className="form-input" value={form.status} onChange={e => set("status", e.target.value)}>{["Aberta","Pausada","Encerrada"].map(s => <option key={s}>{s}</option>)}</select></div>
+            <div className="form-group">
+              <label className="form-label">Motivo de Abertura</label>
+              <select className="form-input" value={form.motivo_abertura} onChange={e => set("motivo_abertura", e.target.value)} style={{ marginBottom: 6 }}>
+                <option value="">Selecione</option>
+                <option>Aumento de Quadro</option>
+                <option>Substituição</option>
+                <option>Função Nova</option>
+                <option>Projeto Temporário</option>
+                <option>Expansão de Time</option>
+                <option>Reposição por Demissão</option>
+                <option>Reposição por Aposentadoria</option>
+                <option>Outro</option>
+              </select>
+              <input className="form-input" value={form.motivo_abertura} onChange={e => set("motivo_abertura", e.target.value)} placeholder="Ou descreva livremente o motivo..."/>
+            </div>
             <div className="form-group"><label className="form-label">Observações</label><textarea className="form-textarea" value={form.observacoes} onChange={e => set("observacoes", e.target.value)} placeholder="Requisitos, benefícios..."/></div>
             <div className="modal-actions"><button className="btn btn-ghost" onClick={() => setModal(false)}>Cancelar</button><button className="btn btn-primary" onClick={salvar} disabled={!form.titulo}>{editando ? "Salvar" : "Criar Vaga"}</button></div>
           </div>
@@ -2040,17 +2075,9 @@ function ContratacaoModal({ candidato, empresaId, onFechar }) {
 
   const FORM_VAZIO = {
     data_nascimento: "", rg: "", cpf: "", pis: "", pix: "",
-    estado_civil: "",
-    // Endereço
-    cep: "", logradouro: "", numero: "", complemento: "", bairro: "", cidade: "", estado: "",
-    // Dependentes
-    dependentes: "",
-    // Responsável
     nome_responsavel: "", grau_parentesco: "",
     rg_responsavel: "", cpf_responsavel: "", email_responsavel: "",
-    // Contrato
     data_inicio: "", remuneracao: "", beneficios: "", unidade: "", equipe: "",
-    vale_transporte_ida: "", vale_transporte_volta: "",
     // Documento estrangeiro
     is_estrangeiro: false,
     passaporte: "", pais_origem: "", rne: "", visto_tipo: "", visto_validade: "",
@@ -2085,22 +2112,11 @@ function ContratacaoModal({ candidato, empresaId, onFechar }) {
           rg_responsavel: existente.rg_responsavel || "",
           cpf_responsavel: existente.cpf_responsavel || "",
           email_responsavel: existente.email_responsavel || "",
-          estado_civil: existente.estado_civil || "",
-          cep: existente.cep || "",
-          logradouro: existente.logradouro || "",
-          numero: existente.numero || "",
-          complemento: existente.complemento || "",
-          bairro: existente.bairro || "",
-          cidade: existente.cidade || "",
-          estado: existente.estado || "",
-          dependentes: existente.dependentes || "",
           data_inicio: existente.data_inicio || "",
           remuneracao: existente.remuneracao ? String(existente.remuneracao) : "",
           beneficios: existente.beneficios || "",
           unidade: existente.unidade || "",
           equipe: existente.equipe || "",
-          vale_transporte_ida: existente.vale_transporte_ida ? String(existente.vale_transporte_ida) : "",
-          vale_transporte_volta: existente.vale_transporte_volta ? String(existente.vale_transporte_volta) : "",
           is_estrangeiro: existente.is_estrangeiro || false,
           passaporte: existente.passaporte || "",
           pais_origem: existente.pais_origem || "",
@@ -2202,46 +2218,10 @@ function ContratacaoModal({ candidato, empresaId, onFechar }) {
               <div className="modal-section">📋 Dados Pessoais</div>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
                 <CampoContratacao form={form} onChange={handleChange} label="Data de Nascimento" name="data_nascimento" type="date"/>
-                <div className="form-group">
-                  <label className="form-label">Estado Civil</label>
-                  <select className="form-input" name="estado_civil" value={form.estado_civil || ""} onChange={handleChange}>
-                    <option value="">Selecione</option>
-                    <option>Solteiro(a)</option>
-                    <option>Casado(a)</option>
-                    <option>Divorciado(a)</option>
-                    <option>Viúvo(a)</option>
-                    <option>União Estável</option>
-                    <option>Separado(a)</option>
-                  </select>
-                </div>
                 <CampoContratacao form={form} onChange={handleChange} label="RG" name="rg" placeholder="00.000.000-0"/>
                 <CampoContratacao form={form} onChange={handleChange} label="CPF" name="cpf" placeholder="000.000.000-00"/>
                 <CampoContratacao form={form} onChange={handleChange} label="PIS" name="pis" placeholder="000.00000.00-0"/>
                 <CampoContratacao form={form} onChange={handleChange} label="PIX (chave)" name="pix" placeholder="CPF, e-mail ou telefone"/>
-              </div>
-
-              {/* Endereço */}
-              <div className="modal-section">🏠 Endereço</div>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-                <CampoContratacao form={form} onChange={handleChange} label="CEP" name="cep" placeholder="00000-000"/>
-                <CampoContratacao form={form} onChange={handleChange} label="Número" name="numero" placeholder="Ex: 123"/>
-                <CampoContratacao form={form} onChange={handleChange} label="Logradouro" name="logradouro" placeholder="Rua, Av, Alameda..." span2/>
-                <CampoContratacao form={form} onChange={handleChange} label="Complemento" name="complemento" placeholder="Apto, Bloco..."/>
-                <CampoContratacao form={form} onChange={handleChange} label="Bairro" name="bairro" placeholder="Bairro"/>
-                <CampoContratacao form={form} onChange={handleChange} label="Cidade" name="cidade" placeholder="Cidade"/>
-                <CampoContratacao form={form} onChange={handleChange} label="Estado (UF)" name="estado" placeholder="Ex: SP"/>
-              </div>
-
-              {/* Dependentes */}
-              <div className="modal-section">👨‍👩‍👧‍👦 Dependentes</div>
-              <div className="form-group">
-                <label className="form-label">Dependentes (nome, parentesco e data de nascimento)</label>
-                <textarea className="form-textarea" name="dependentes" value={form.dependentes || ""} onChange={handleChange} rows={3} placeholder="Ex: João Silva - Filho - 10/05/2015&#10;Maria Silva - Cônjuge - 22/03/1990"/>
-              </div>
-
-              {/* Responsável */}
-              <div className="modal-section" style={{marginTop:4}}>👤 Contato do Responsável</div>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
                 <CampoContratacao form={form} onChange={handleChange} label="Nome do Responsável" name="nome_responsavel" placeholder="Nome completo"/>
                 <CampoContratacao form={form} onChange={handleChange} label="Grau de Parentesco" name="grau_parentesco" placeholder="Ex: Mãe, Pai, Cônjuge..."/>
               </div>
@@ -2284,8 +2264,6 @@ function ContratacaoModal({ candidato, empresaId, onFechar }) {
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
                 <CampoContratacao form={form} onChange={handleChange} label="Data de Início" name="data_inicio" type="date"/>
                 <CampoContratacao form={form} onChange={handleChange} label="Remuneração (R$)" name="remuneracao" type="number" placeholder="0.00"/>
-                <CampoContratacao form={form} onChange={handleChange} label="Vale Transporte — Ida (R$)" name="vale_transporte_ida" type="number" placeholder="0.00"/>
-                <CampoContratacao form={form} onChange={handleChange} label="Vale Transporte — Volta (R$)" name="vale_transporte_volta" type="number" placeholder="0.00"/>
                 <CampoContratacao form={form} onChange={handleChange} label="Unidade" name="unidade" placeholder="Nome da unidade"/>
                 <CampoContratacao form={form} onChange={handleChange} label="Equipe" name="equipe" placeholder="Nome da equipe"/>
                 <CampoContratacao form={form} onChange={handleChange} label="Benefícios" name="beneficios" type="textarea" placeholder="Vale-refeição, plano de saúde..." span2/>
