@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
@@ -2462,35 +2463,49 @@ function UsuariosEmp({ empresaId, user, minhasEmpresas }) {
 
   React.useEffect(() => {
     const load = async () => {
-      const [us, emps] = await Promise.all([db.get("sistema_usuarios",""), db.get("empresas","&ativa=eq.true")]);
-      if (Array.isArray(us)) setUsuarios(us);
-      if (Array.isArray(emps)) setEmpresas(emps);
-      const vr = await fetch(`${SB_URL}/rest/v1/usuarios_empresas?select=usuario_id,empresa_id`, { headers: { "apikey": SB_KEY, "Authorization": `Bearer ${SB_KEY}` } }).then(r => r.json());
-      if (Array.isArray(vr)) {
-        const map = {};
-        vr.forEach(v => { if (!map[v.usuario_id]) map[v.usuario_id] = []; map[v.usuario_id].push(v.empresa_id); });
-        setVinculos(map);
-      }
+      // IDs das empresas que o coordenador logado gerencia
+      const idsEmpresas = minhasEmpresas && minhasEmpresas.length > 0
+        ? minhasEmpresas.map(e => e.id)
+        : [empresaId];
+      // Busca usuários vinculados a qualquer empresa do coordenador
+      const vincEmpReqs = await Promise.all(
+        idsEmpresas.map(eid =>
+          fetch(`${SB_URL}/rest/v1/usuarios_empresas?empresa_id=eq.${eid}&select=usuario_id,sistema_usuarios(*)`, { headers: { "apikey": SB_KEY, "Authorization": `Bearer ${SB_KEY}` } }).then(r => r.json()).catch(() => [])
+        )
+      );
+      // Deduplica usuários por id
+      const usersMap = {};
+      vincEmpReqs.flat().forEach(v => { if (v.sistema_usuarios) usersMap[v.sistema_usuarios.id] = v.sistema_usuarios; });
+      setUsuarios(Object.values(usersMap));
+      // Vínculos de todos esses usuários (apenas nas empresas do coordenador)
+      const vrReqs = await Promise.all(
+        idsEmpresas.map(eid =>
+          fetch(`${SB_URL}/rest/v1/usuarios_empresas?empresa_id=eq.${eid}&select=usuario_id,empresa_id`, { headers: { "apikey": SB_KEY, "Authorization": `Bearer ${SB_KEY}` } }).then(r => r.json()).catch(() => [])
+        )
+      );
+      const map = {};
+      vrReqs.flat().forEach(v => { if (!map[v.usuario_id]) map[v.usuario_id] = []; if (!map[v.usuario_id].includes(v.empresa_id)) map[v.usuario_id].push(v.empresa_id); });
+      setVinculos(map);
+      // Empresas disponíveis = só as do coordenador
+      setEmpresas(minhasEmpresas && minhasEmpresas.length > 0 ? minhasEmpresas : []);
       setLoading(false);
     }; load();
   }, []);
 
   const salvar = async () => {
     if (!form.nome || !form.login) return;
-    const r = await db.post("sistema_usuarios", { ...form, ativo: true });
+    const empresasSel = form.empresasSel && form.empresasSel.length > 0 ? form.empresasSel : [empresaId];
+    const { empresasSel: _, ...formData } = form;
+    const r = await db.post("sistema_usuarios", { ...formData, ativo: true });
     if (Array.isArray(r) && r[0]) {
       const novoUser = r[0];
-      // Vincula o novo usuário a TODAS as empresas que o criador tem acesso
-      const todasEmpresas = minhasEmpresas && minhasEmpresas.length > 0
-        ? minhasEmpresas.map(e => e.id)
-        : [empresaId];
-      await Promise.all(todasEmpresas.map(empId =>
-        fetch(`${SB_URL}/rest/v1/usuarios_empresas`, { method: "POST", headers: { "apikey": SB_KEY, "Authorization": `Bearer ${SB_KEY}`, "Content-Type": "application/json" }, body: JSON.stringify({ usuario_id: novoUser.id, empresa_id: empId }) })
+      await Promise.all(empresasSel.map(eid =>
+        fetch(`${SB_URL}/rest/v1/usuarios_empresas`, { method: "POST", headers: { "apikey": SB_KEY, "Authorization": `Bearer ${SB_KEY}`, "Content-Type": "application/json" }, body: JSON.stringify({ usuario_id: novoUser.id, empresa_id: eid }) })
       ));
       setUsuarios(u => [novoUser, ...u]);
-      setVinculos(v => ({ ...v, [novoUser.id]: todasEmpresas }));
+      setVinculos(v => ({ ...v, [novoUser.id]: empresasSel }));
     }
-    setModal(false); setForm({ nome: "", email: "", login: "", senha_hash: "Temay@2025", perfil: "assistente" });
+    setModal(false); setForm({ nome: "", email: "", login: "", senha_hash: "Temay@2025", perfil: "assistente", empresasSel: [] });
   };
 
   const toggleVinculo = async (usuarioId, empId) => {
@@ -2565,7 +2580,7 @@ function UsuariosEmp({ empresaId, user, minhasEmpresas }) {
 
       {modal && (
         <div className="modal-overlay" onClick={() => setModal(false)}>
-          <div className="modal" style={{ maxWidth: 460 }} onClick={e => e.stopPropagation()}>
+          <div className="modal" style={{ maxWidth: 480 }} onClick={e => e.stopPropagation()}>
             <div className="modal-header"><span className="modal-title">👤 Novo Usuário</span><button className="modal-close" onClick={() => setModal(false)}>×</button></div>
             <div className="form-row">
               <div className="form-group"><label className="form-label">Nome *</label><input className="form-input" value={form.nome} onChange={e => setForm(f => ({ ...f, nome: e.target.value }))}/></div>
@@ -2573,9 +2588,28 @@ function UsuariosEmp({ empresaId, user, minhasEmpresas }) {
             </div>
             <div className="form-row">
               <div className="form-group"><label className="form-label">Login *</label><input className="form-input" value={form.login} onChange={e => setForm(f => ({ ...f, login: e.target.value.toLowerCase() }))} placeholder="Ex: joao.silva"/><div className="form-hint">Sem espaços, letras minúsculas</div></div>
-              <div className="form-group"><label className="form-label">Perfil</label><select className="form-input" value={form.perfil} onChange={e => setForm(f => ({ ...f, perfil: e.target.value }))}><option value="admin">Administrador</option><option value="coordenador">Coordenador RH</option><option value="assistente">Assistente RH</option><option value="auxiliar">Auxiliar RH</option></select></div>
+              <div className="form-group"><label className="form-label">Perfil</label><select className="form-input" value={form.perfil} onChange={e => setForm(f => ({ ...f, perfil: e.target.value }))}><option value="coordenador">Coordenador RH</option><option value="assistente">Assistente RH</option><option value="auxiliar">Auxiliar RH</option></select></div>
             </div>
             <div className="form-group"><label className="form-label">Senha inicial</label><input className="form-input" value={form.senha_hash} onChange={e => setForm(f => ({ ...f, senha_hash: e.target.value }))}/></div>
+            {empresas.length > 1 && (
+              <div className="form-group">
+                <label className="form-label">Acesso às empresas *</label>
+                <div style={{ display: "flex", flexDirection: "column", gap: 6, maxHeight: 180, overflowY: "auto" }}>
+                  {empresas.map(emp => {
+                    const sel = (form.empresasSel || []).includes(emp.id);
+                    return (
+                      <div key={emp.id} onClick={() => setForm(f => ({ ...f, empresasSel: sel ? (f.empresasSel||[]).filter(id => id !== emp.id) : [...(f.empresasSel||[]), emp.id] }))}
+                        style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 12px", background: sel ? "rgba(159,122,234,0.1)" : "var(--bg3)", border: `1px solid ${sel ? "var(--green)" : "var(--border)"}`, borderRadius: "var(--radius-sm)", cursor: "pointer" }}>
+                        <div style={{ width: 16, height: 16, borderRadius: 4, border: `2px solid ${sel ? "var(--green)" : "var(--border)"}`, background: sel ? "var(--green)" : "transparent", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                          {sel && <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="#000" strokeWidth="3"><path d="M20 6L9 17l-5-5"/></svg>}
+                        </div>
+                        <span style={{ fontSize: 13, fontWeight: 600 }}>{emp.nome}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
             <div className="modal-actions"><button className="btn btn-ghost" onClick={() => setModal(false)}>Cancelar</button><button className="btn btn-primary" onClick={salvar} disabled={!form.nome || !form.login}>Criar Usuário</button></div>
           </div>
         </div>
