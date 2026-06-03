@@ -2593,7 +2593,7 @@ function UsuariosEmp({ empresaId, user, minhasEmpresas }) {
             </div>
             <div className="form-row">
               <div className="form-group"><label className="form-label">Login *</label><input className="form-input" value={form.login} onChange={e => setForm(f => ({ ...f, login: e.target.value.toLowerCase() }))} placeholder="Ex: joao.silva"/><div className="form-hint">Sem espaços, letras minúsculas</div></div>
-              <div className="form-group"><label className="form-label">Perfil</label><select className="form-input" value={form.perfil} onChange={e => setForm(f => ({ ...f, perfil: e.target.value }))}><option value="coordenador">Coordenador RH</option><option value="assistente">Assistente RH</option><option value="auxiliar">Auxiliar RH</option></select></div>
+              <div className="form-group"><label className="form-label">Perfil</label><select className="form-input" value={form.perfil} onChange={e => setForm(f => ({ ...f, perfil: e.target.value }))}><option value="coordenador">Coordenador RH</option><option value="assistente">Assistente RH</option><option value="auxiliar">Auxiliar RH</option><option value="gestor">Gestor</option></select></div>
             </div>
             <div className="form-group"><label className="form-label">Senha inicial</label><input className="form-input" value={form.senha_hash} onChange={e => setForm(f => ({ ...f, senha_hash: e.target.value }))}/></div>
             {empresas.length > 1 && (
