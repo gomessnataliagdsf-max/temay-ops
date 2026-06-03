@@ -2671,6 +2671,12 @@ function UsuariosEmp({ empresaId, user, minhasEmpresas }) {
 // GESTOR APP
 // ============================================================
 function GestorApp({ user, onLogout }) {
+  const minhasEmpresas = user.minhasEmpresas || [];
+  const [empresaAtiva, setEmpresaAtiva] = React.useState(user.empresa_id);
+  const empresaAtivaObj = minhasEmpresas.find(e => e.id === empresaAtiva) || minhasEmpresas[0] || { id: user.empresa_id, nome: user.empresa_nome };
+  const empId = empresaAtivaObj?.id;
+  const empNome = empresaAtivaObj?.nome;
+
   const [modalNova, setModalNova] = React.useState(false);
   const [sols, setSols] = React.useState([]);
   const [loadingSols, setLoadingSols] = React.useState(true);
@@ -2678,12 +2684,12 @@ function GestorApp({ user, onLogout }) {
 
   const carregarSols = () => {
     setLoadingSols(true);
-    fetch(`${SB_URL}/rest/v1/solicitacoes_rh?gestor_id=eq.${user.id}&order=created_at.desc`, {
+    fetch(`${SB_URL}/rest/v1/solicitacoes_rh?gestor_id=eq.${user.id}&empresa_id=eq.${empId}&order=created_at.desc`, {
       headers: { "apikey": SB_KEY, "Authorization": `Bearer ${SB_KEY}` }
     }).then(r => r.json()).then(d => { setSols(Array.isArray(d) ? d : []); setLoadingSols(false); }).catch(() => setLoadingSols(false));
   };
 
-  React.useEffect(() => { carregarSols(); }, []);
+  React.useEffect(() => { carregarSols(); }, [empId]);
 
   const STATUS_SOL = {
     aguardando_rh: { label: "Aguardando RH", cor: "#faa61a", icon: "⏳" },
@@ -2696,7 +2702,7 @@ function GestorApp({ user, onLogout }) {
   const reprovados = sols.filter(s => s.status === "reprovado").length;
 
   return (
-    <div className="app-layout" style={{ "--green": "#faa61a", "--green2": "#e09600", "--green-dim": "rgba(250,166,26,0.1)", "--green-dim2": "rgba(250,166,26,0.15)" }}>
+    <div className="app" style={{ "--green": "#faa61a", "--green2": "#e09600", "--green-dim": "rgba(250,166,26,0.1)", "--green-dim2": "rgba(250,166,26,0.15)" }}>
       <aside className="sidebar">
         <div className="sidebar-brand">
           <div className="brand-icon">HR<span>S</span></div>
@@ -2719,7 +2725,14 @@ function GestorApp({ user, onLogout }) {
         <header className="topbar">
           <div className="topbar-title" style={{ display: "flex", alignItems: "center", gap: 8 }}>
             Minhas Solicitações
-            <span style={{ fontSize: 10, fontWeight: 600, color: "var(--text3)", background: "var(--bg3)", border: "1px solid var(--border)", borderRadius: 20, padding: "2px 8px" }}>{user.empresa_nome}</span>
+            {minhasEmpresas.length > 1 ? (
+              <select value={empresaAtiva} onChange={e => setEmpresaAtiva(e.target.value)}
+                style={{ fontSize: 11, fontWeight: 600, color: "var(--text3)", background: "var(--bg3)", border: "1px solid var(--border)", borderRadius: 20, padding: "2px 10px", cursor: "pointer", outline: "none" }}>
+                {minhasEmpresas.map(e => <option key={e.id} value={e.id}>{e.nome}</option>)}
+              </select>
+            ) : (
+              <span style={{ fontSize: 10, fontWeight: 600, color: "var(--text3)", background: "var(--bg3)", border: "1px solid var(--border)", borderRadius: 20, padding: "2px 8px" }}>{empNome}</span>
+            )}
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
             <button className="btn btn-primary" onClick={() => setModalNova(true)} style={{ fontSize: 12, display: "flex", alignItems: "center", gap: 6 }}>
@@ -2797,12 +2810,12 @@ function GestorApp({ user, onLogout }) {
           )}
         </main>
       </div>
-      {modalNova && <NovaSolicitacao user={user} onEnviado={() => { setModalNova(false); carregarSols(); }} onClose={() => setModalNova(false)}/>}
+      {modalNova && <NovaSolicitacao user={user} empresaId={empId} empresaNome={empNome} onEnviado={() => { setModalNova(false); carregarSols(); }} onClose={() => setModalNova(false)}/>}
     </div>
   );
 }
 
-function NovaSolicitacao({ user, onEnviado, onClose }) {
+function NovaSolicitacao({ user, empresaId, empresaNome, onEnviado, onClose }) {
   const [tipo, setTipo] = React.useState("vaga");
   const [form, setForm] = React.useState({});
   const [loading, setLoading] = React.useState(false);
@@ -2816,8 +2829,8 @@ function NovaSolicitacao({ user, onEnviado, onClose }) {
       status: "aguardando_rh",
       gestor_id: user.id,
       gestor_nome: user.nome,
-      empresa_id: user.empresa_id,
-      empresa_nome: user.empresa_nome,
+      empresa_id: empId,
+      empresa_nome: empNome,
       dados: JSON.stringify(form),
       created_at: new Date().toISOString()
     };
