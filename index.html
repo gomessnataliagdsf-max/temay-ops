@@ -2459,6 +2459,8 @@ function UsuariosEmp({ empresaId, user, minhasEmpresas }) {
   const [loading, setLoading] = React.useState(true);
   const [modal, setModal] = React.useState(false);
   const [modalSenha, setModalSenha] = React.useState(null);
+  const [modalEdit, setModalEdit] = React.useState(null);
+  const [formEdit, setFormEdit] = React.useState({});
   const [modalEmpresas, setModalEmpresas] = React.useState(null);
   const [confirmDel, setConfirmDel] = React.useState(null);
   const [form, setForm] = React.useState({ nome: "", email: "", login: "", senha_hash: "Temay@2025", perfil: "assistente" });
@@ -2533,6 +2535,13 @@ function UsuariosEmp({ empresaId, user, minhasEmpresas }) {
     setTimeout(() => { setModalSenha(null); setMsg(""); setSenhaNova(""); }, 2000);
   };
 
+  const salvarEdicao = async () => {
+    if (!formEdit.nome || !formEdit.login) return;
+    await db.patch("sistema_usuarios", modalEdit.id, { nome: formEdit.nome, email: formEdit.email, login: formEdit.login.toLowerCase(), perfil: formEdit.perfil });
+    setUsuarios(u => u.map(x => x.id === modalEdit.id ? { ...x, ...formEdit, login: formEdit.login.toLowerCase() } : x));
+    setModalEdit(null);
+  };
+
   const toggleAtivo = async (u) => {
     if (u.id === user.id) return;
     await db.patch("sistema_usuarios", u.id, { ativo: !u.ativo });
@@ -2573,7 +2582,8 @@ function UsuariosEmp({ empresaId, user, minhasEmpresas }) {
                 <div style={{ display: "flex", gap: 6 }}>
                   <button className="btn btn-ghost btn-sm" style={{ fontSize: 10, padding: "4px 7px" }} onClick={() => setModalEmpresas(u)}>🏢</button>
                   <button className="btn btn-ghost btn-sm" style={{ flex: 1, justifyContent: "center" }} onClick={() => toggleAtivo(u)}>{u.ativo ? "Desativar" : "Ativar"}</button>
-                  <button className="btn btn-ghost btn-sm" onClick={() => { setModalSenha(u); setSenhaNova(""); setMsg(""); }}>🔑</button>
+                  <button className="btn btn-ghost btn-sm" onClick={() => { setModalEdit(u); setFormEdit({ nome: u.nome, email: u.email || "", login: u.login, perfil: u.perfil }); }} title="Editar dados">✏️</button>
+                  <button className="btn btn-ghost btn-sm" onClick={() => { setModalSenha(u); setSenhaNova(""); setMsg(""); }} title="Alterar senha">🔑</button>
                   <button className="btn btn-danger btn-sm" onClick={() => setConfirmDel(u)}><I d={IC.trash} s={11}/></button>
                 </div>
               )}
@@ -2628,6 +2638,24 @@ function UsuariosEmp({ empresaId, user, minhasEmpresas }) {
             <div className="form-group"><label className="form-label">Nova senha</label><input className="form-input" type="password" value={senhaNova} onChange={e => setSenhaNova(e.target.value)} placeholder="Mínimo 4 caracteres"/></div>
             {msg && <div style={{ fontSize: 12, color: msg.includes("✅") ? "var(--green)" : "var(--red)", marginBottom: 10 }}>{msg}</div>}
             <div className="modal-actions"><button className="btn btn-ghost" onClick={() => setModalSenha(null)}>Cancelar</button><button className="btn btn-primary" onClick={trocarSenha}>Salvar Senha</button></div>
+          </div>
+        </div>
+      )}
+
+      {modalEdit && (
+        <div className="modal-overlay" onClick={() => setModalEdit(null)}>
+          <div className="modal" style={{ maxWidth: 440 }} onClick={e => e.stopPropagation()}>
+            <div className="modal-header"><span className="modal-title">✏️ Editar Usuário</span><button className="modal-close" onClick={() => setModalEdit(null)}>×</button></div>
+            <div style={{ fontSize: 13, color: "var(--text2)", marginBottom: 14 }}>Editando <strong style={{ color: "var(--text)" }}>{modalEdit.nome}</strong></div>
+            <div className="form-row">
+              <div className="form-group"><label className="form-label">Nome *</label><input className="form-input" value={formEdit.nome||""} onChange={e => setFormEdit(f => ({ ...f, nome: e.target.value }))}/></div>
+              <div className="form-group"><label className="form-label">E-mail</label><input className="form-input" type="email" value={formEdit.email||""} onChange={e => setFormEdit(f => ({ ...f, email: e.target.value }))}/></div>
+            </div>
+            <div className="form-row">
+              <div className="form-group"><label className="form-label">Login *</label><input className="form-input" value={formEdit.login||""} onChange={e => setFormEdit(f => ({ ...f, login: e.target.value.toLowerCase() }))}/><div className="form-hint">Sem espaços, letras minúsculas</div></div>
+              <div className="form-group"><label className="form-label">Perfil</label><select className="form-input" value={formEdit.perfil||""} onChange={e => setFormEdit(f => ({ ...f, perfil: e.target.value }))}><option value="coordenador">Coordenador RH</option><option value="assistente">Assistente RH</option><option value="auxiliar">Auxiliar RH</option><option value="gestor">Gestor</option></select></div>
+            </div>
+            <div className="modal-actions"><button className="btn btn-ghost" onClick={() => setModalEdit(null)}>Cancelar</button><button className="btn btn-primary" onClick={salvarEdicao} disabled={!formEdit.nome || !formEdit.login}>Salvar</button></div>
           </div>
         </div>
       )}
@@ -2704,9 +2732,14 @@ function GestorApp({ user, onLogout }) {
   return (
     <div className="app" style={{ "--green": "#faa61a", "--green2": "#e09600", "--green-dim": "rgba(250,166,26,0.1)", "--green-dim2": "rgba(250,166,26,0.15)" }}>
       <aside className="sidebar">
-        <div className="sidebar-brand">
-          <div className="brand-icon">HR<span>S</span></div>
-          <div><div className="brand-name">HRSystem</div><div className="brand-sub">Portal do Gestor</div></div>
+        <div className="sidebar-logo">
+          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
+            <div style={{ fontFamily: "var(--font-head)", fontWeight: 900, fontSize: 16, color: "#fff" }}>HR<span style={{ color: "var(--green)" }}>S</span></div>
+            <div>
+              <div style={{ fontFamily: "var(--font-head)", fontWeight: 800, fontSize: 11, color: "var(--text)" }}>HRSystem</div>
+              <div style={{ fontSize: 9, color: "var(--green)", fontWeight: 500, letterSpacing: ".04em" }}>Portal do Gestor</div>
+            </div>
+          </div>
         </div>
         <nav className="sidebar-nav">
           <div className="nav-section">Menu</div>
