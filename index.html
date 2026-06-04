@@ -2708,6 +2708,7 @@ function GestorApp({ user, onLogout }) {
   const [modalNova, setModalNova] = React.useState(false);
   const [sols, setSols] = React.useState([]);
   const [loadingSols, setLoadingSols] = React.useState(true);
+  const [confirmDelSol, setConfirmDelSol] = React.useState(null);
   const perfilInfo = PERFIS[user.perfil] || PERFIS.assistente;
 
   const carregarSols = () => {
@@ -2715,6 +2716,15 @@ function GestorApp({ user, onLogout }) {
     fetch(`${SB_URL}/rest/v1/solicitacoes_rh?gestor_id=eq.${user.id}&empresa_id=eq.${empId}&order=created_at.desc`, {
       headers: { "apikey": SB_KEY, "Authorization": `Bearer ${SB_KEY}` }
     }).then(r => r.json()).then(d => { setSols(Array.isArray(d) ? d : []); setLoadingSols(false); }).catch(() => setLoadingSols(false));
+  };
+
+  const excluirSol = async (id) => {
+    await fetch(`${SB_URL}/rest/v1/solicitacoes_rh?id=eq.${id}`, {
+      method: "DELETE",
+      headers: { "apikey": SB_KEY, "Authorization": `Bearer ${SB_KEY}` }
+    });
+    setSols(s => s.filter(x => x.id !== id));
+    setConfirmDelSol(null);
   };
 
   React.useEffect(() => { carregarSols(); }, [empId]);
@@ -2827,9 +2837,15 @@ function GestorApp({ user, onLogout }) {
                           </div>
                         </div>
                       </div>
-                      <span style={{ fontSize: 11, fontWeight: 700, padding: "4px 12px", borderRadius: 20, background: `${st.cor}18`, color: st.cor, whiteSpace: "nowrap", flexShrink: 0 }}>
-                        {st.icon} {st.label}
-                      </span>
+                      <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
+                        <span style={{ fontSize: 11, fontWeight: 700, padding: "4px 12px", borderRadius: 20, background: `${st.cor}18`, color: st.cor, whiteSpace: "nowrap" }}>
+                          {st.icon} {st.label}
+                        </span>
+                        <button onClick={() => setConfirmDelSol(s)} title="Excluir solicitação"
+                          style={{ width: 28, height: 28, borderRadius: 8, border: "1px solid rgba(240,71,71,0.3)", background: "rgba(240,71,71,0.07)", color: "#f04747", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                          <I d={IC.trash} s={12}/>
+                        </button>
+                      </div>
                     </div>
                     {(s.obs_rh) && (
                       <div style={{ fontSize: 12, marginTop: 10, padding: "8px 12px", borderRadius: "var(--radius-sm)", background: s.status === "reprovado" ? "rgba(240,71,71,0.07)" : "var(--green-dim)", border: `1px solid ${s.status === "reprovado" ? "rgba(240,71,71,0.2)" : "var(--green)"}`, color: s.status === "reprovado" ? "#f04747" : "var(--green)" }}>
@@ -2844,6 +2860,21 @@ function GestorApp({ user, onLogout }) {
         </main>
       </div>
       {modalNova && <NovaSolicitacao user={user} empresaId={empId} empresaNome={empNome} onEnviado={() => { setModalNova(false); carregarSols(); }} onClose={() => setModalNova(false)}/>}
+
+      {confirmDelSol && (
+        <div className="modal-overlay" onClick={() => setConfirmDelSol(null)}>
+          <div className="modal" style={{ maxWidth: 360 }} onClick={e => e.stopPropagation()}>
+            <div className="modal-header"><span className="modal-title">🗑️ Excluir Solicitação</span><button className="modal-close" onClick={() => setConfirmDelSol(null)}>×</button></div>
+            <div style={{ fontSize: 13, color: "var(--text2)", marginBottom: 20 }}>
+              Tem certeza que deseja excluir a solicitação de <strong style={{ color: "var(--text)" }}>{confirmDelSol.tipo === "vaga" ? "Abertura de Vaga" : "Desligamento"}</strong>? Essa ação não pode ser desfeita.
+            </div>
+            <div className="modal-actions">
+              <button className="btn btn-ghost" onClick={() => setConfirmDelSol(null)}>Cancelar</button>
+              <button className="btn btn-danger" onClick={() => excluirSol(confirmDelSol.id)}>Excluir</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
