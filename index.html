@@ -2061,28 +2061,19 @@ function ContratacaoEmp({ data, setData, empresaId, user }) {
 // (se definido dentro, React recria o elemento a cada render
 //  causando perda de foco ao digitar — esse era o bug)
 // ============================================================
-function CampoContratacao({ label, name, type, placeholder, span2, form, onChange }) {
+function CampoContratacao({ label, name, type, placeholder, span2, form, onChange, options }) {
   return (
     <div className="form-group" style={span2 ? { gridColumn: "1/-1" } : {}}>
       <label className="form-label">{label}</label>
       {type === "textarea" ? (
-        <textarea
-          className="form-textarea"
-          name={name}
-          value={form[name] || ""}
-          onChange={onChange}
-          placeholder={placeholder || ""}
-        />
+        <textarea className="form-textarea" name={name} value={form[name] || ""} onChange={onChange} placeholder={placeholder || ""} style={{ resize: "vertical" }}/>
+      ) : type === "select" ? (
+        <select className="form-input" name={name} value={form[name] || ""} onChange={onChange}>
+          <option value="">Selecione</option>
+          {(options||[]).map(o => <option key={o} value={o}>{o}</option>)}
+        </select>
       ) : (
-        <input
-          className="form-input"
-          type={type || "text"}
-          name={name}
-          value={form[name] || ""}
-          onChange={onChange}
-          placeholder={placeholder || ""}
-          autoComplete="off"
-        />
+        <input className="form-input" type={type || "text"} name={name} value={form[name] || ""} onChange={onChange} placeholder={placeholder || ""} autoComplete="off"/>
       )}
     </div>
   );
@@ -2091,17 +2082,134 @@ function CampoContratacao({ label, name, type, placeholder, span2, form, onChang
 // ============================================================
 // MODAL CONTRATAÇÃO — campos funcionais, carregamento real
 // ============================================================
+
+// ============================================================
+// DEPENDENTES
+// ============================================================
+function SecaoDependentes({ form, setForm }) {
+  const deps = form.dependentes || [];
+  const addDep = () => setForm(f => ({ ...f, dependentes: [...(f.dependentes||[]), { id: Date.now(), nome: "", parentesco: "", cpf: "", data_nascimento: "" }] }));
+  const updDep = (id, field, val) => setForm(f => ({ ...f, dependentes: (f.dependentes||[]).map(d => d.id === id ? { ...d, [field]: val } : d) }));
+  const remDep = (id) => setForm(f => ({ ...f, dependentes: (f.dependentes||[]).filter(d => d.id !== id) }));
+  const base = { background: "var(--bg3)", border: "1px solid var(--border)", borderRadius: "var(--radius-sm)", color: "var(--text)", fontSize: 12, padding: "7px 9px", width: "100%", outline: "none" };
+  return (<>
+    <div className="modal-section" style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+      <span>👨‍👩‍👦 Dependentes</span>
+      <button onClick={addDep} style={{ fontSize: 11, fontWeight: 700, color: "var(--green)", background: "var(--green-dim)", border: "1px solid var(--green)", borderRadius: 8, padding: "3px 10px", cursor: "pointer" }}>+ Adicionar</button>
+    </div>
+    {deps.length === 0 && <div style={{ fontSize: 12, color: "var(--text3)", marginBottom: 12, padding: "10px 0" }}>Nenhum dependente cadastrado.</div>}
+    {deps.map((d, i) => (
+      <div key={d.id} style={{ background: "var(--bg3)", border: "1px solid var(--border)", borderRadius: "var(--radius-sm)", padding: 12, marginBottom: 10 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+          <span style={{ fontSize: 12, fontWeight: 700, color: "var(--text2)" }}>Dependente {i+1}</span>
+          <button onClick={() => remDep(d.id)} style={{ fontSize: 11, color: "#f04747", background: "rgba(240,71,71,0.1)", border: "1px solid rgba(240,71,71,0.2)", borderRadius: 6, padding: "2px 8px", cursor: "pointer" }}>Remover</button>
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+          <div><label className="form-label">Nome completo</label><input style={base} value={d.nome} onChange={e => updDep(d.id,"nome",e.target.value)} placeholder="Nome"/></div>
+          <div><label className="form-label">Parentesco</label><select style={base} value={d.parentesco} onChange={e => updDep(d.id,"parentesco",e.target.value)}><option value="">Selecione</option>{["Filho(a)","Cônjuge","Companheiro(a)","Pai","Mãe","Enteado(a)","Tutelado(a)"].map(o=><option key={o}>{o}</option>)}</select></div>
+          <div><label className="form-label">CPF</label><input style={base} value={d.cpf} onChange={e => updDep(d.id,"cpf",e.target.value)} placeholder="000.000.000-00"/></div>
+          <div><label className="form-label">Data de Nascimento</label><input type="date" style={base} value={d.data_nascimento} onChange={e => updDep(d.id,"data_nascimento",e.target.value)}/></div>
+        </div>
+      </div>
+    ))}
+  </>);
+}
+
+// ============================================================
+// GERAR LINK FORMULÁRIO CANDIDATO
+// ============================================================
+function GerarLinkFormulario({ candidato, empresaId, contratacaoId }) {
+  const [link, setLink] = React.useState(null);
+  const [copiado, setCopiado] = React.useState(false);
+  const [gerando, setGerando] = React.useState(false);
+
+  const gerarLink = async () => {
+    setGerando(true);
+    const token = btoa(`${candidato.id}__${empresaId}__${Date.now()}`).replace(/=/g,"");
+    await fetch(`${SB_URL}/rest/v1/contratacoes?candidato_id=eq.${candidato.id}`, {
+      method: "PATCH",
+      headers: { "apikey": SB_KEY, "Authorization": `Bearer ${SB_KEY}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ token_formulario: token, token_expira: new Date(Date.now() + 7*24*60*60*1000).toISOString() })
+    });
+    // Se ainda não tem contratação criada, cria uma com o token
+    if (!contratacaoId) {
+      await fetch(`${SB_URL}/rest/v1/contratacoes`, {
+        method: "POST",
+        headers: { "apikey": SB_KEY, "Authorization": `Bearer ${SB_KEY}`, "Content-Type": "application/json", "Prefer": "return=minimal" },
+        body: JSON.stringify({ candidato_id: candidato.id, empresa_id: empresaId, token_formulario: token, token_expira: new Date(Date.now() + 7*24*60*60*1000).toISOString() })
+      });
+    }
+    const url = `${window.location.origin}${window.location.pathname}?formulario=${token}`;
+    setLink(url);
+    setGerando(false);
+  };
+
+  const copiar = () => {
+    navigator.clipboard.writeText(link);
+    setCopiado(true);
+    setTimeout(() => setCopiado(false), 2000);
+  };
+
+  const whatsapp = () => {
+    const msg = encodeURIComponent(`Olá ${candidato.nome}! 😊
+
+Para continuar seu processo de contratação, preencha o formulário abaixo com seus dados e documentos:
+
+${link}
+
+O link é válido por 7 dias.`);
+    window.open(`https://wa.me/55${(candidato.telefone||"").replace(/\D/g,"")}?text=${msg}`, "_blank");
+  };
+
+  return (
+    <div style={{ background: "var(--green-dim)", border: "1px solid var(--green)", borderRadius: "var(--radius-sm)", padding: "14px 16px", marginBottom: 16 }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+        <div>
+          <div style={{ fontSize: 13, fontWeight: 700, color: "var(--green)", marginBottom: 2 }}>🔗 Formulário do Candidato</div>
+          <div style={{ fontSize: 11, color: "var(--text2)" }}>Gere um link para o candidato preencher seus dados e enviar documentos</div>
+        </div>
+        {!link && <button className="btn btn-primary" style={{ fontSize: 12 }} onClick={gerarLink} disabled={gerando}>{gerando ? "Gerando..." : "Gerar Link"}</button>}
+      </div>
+      {link && (
+        <div style={{ marginTop: 12, display: "flex", flexDirection: "column", gap: 8 }}>
+          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+            <input readOnly value={link} style={{ flex: 1, fontSize: 11, padding: "7px 10px", background: "var(--bg3)", border: "1px solid var(--border)", borderRadius: "var(--radius-sm)", color: "var(--text)", outline: "none" }}/>
+            <button className="btn btn-ghost" style={{ fontSize: 12, whiteSpace: "nowrap" }} onClick={copiar}>{copiado ? "✅ Copiado!" : "📋 Copiar"}</button>
+          </div>
+          <div style={{ display: "flex", gap: 8 }}>
+            {candidato.telefone && <button onClick={whatsapp} style={{ fontSize: 12, padding: "7px 14px", background: "#25D366", color: "#fff", border: "none", borderRadius: "var(--radius-sm)", cursor: "pointer", fontWeight: 600, display: "flex", alignItems: "center", gap: 6 }}><svg width="13" height="13" viewBox="0 0 24 24" fill="#fff"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>Enviar via WhatsApp</button>}
+            <button onClick={gerarLink} style={{ fontSize: 11, color: "var(--text3)", background: "transparent", border: "none", cursor: "pointer", textDecoration: "underline" }}>🔄 Novo link</button>
+          </div>
+          <div style={{ fontSize: 10, color: "var(--text3)" }}>⏰ Válido por 7 dias</div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function ContratacaoModal({ candidato, empresaId, onFechar }) {
   const SB_BUCKET = "documentos-contratacao";
 
   const FORM_VAZIO = {
+    // Dados pessoais
+    tipo_contrato: "", foto_url: "",
     data_nascimento: "", rg: "", cpf: "", pis: "", pix: "",
+    estado_civil: "", escolaridade: "", nome_mae: "", nome_pai: "",
+    cep: "", endereco: "", numero: "", complemento: "", bairro: "", cidade: "", estado: "",
+    banco: "", agencia: "", conta: "", tipo_conta: "",
+    ctps_numero: "", ctps_serie: "", ctps_uf: "",
+    titulo_eleitor: "", zona_eleitoral: "", secao_eleitoral: "",
+    certidao_tipo: "",
+    // Responsável (menor de idade)
     nome_responsavel: "", grau_parentesco: "",
     rg_responsavel: "", cpf_responsavel: "", email_responsavel: "",
-    data_inicio: "", remuneracao: "", beneficios: "", unidade: "", equipe: "",
-    // Documento estrangeiro
+    // Estrangeiro
     is_estrangeiro: false,
     passaporte: "", pais_origem: "", rne: "", visto_tipo: "", visto_validade: "",
+    // Contratuais
+    data_inicio: "", remuneracao: "", beneficios: "", unidade: "", equipe: "",
+    // Dependentes
+    dependentes: [],
   };
 
   const [form, setForm] = React.useState(FORM_VAZIO);
@@ -2123,27 +2231,52 @@ function ContratacaoModal({ candidato, empresaId, onFechar }) {
         setContratacaoId(existente.id);
         setDocumentos(existente.documentos || []);
         setForm({
+          tipo_contrato: existente.tipo_contrato || "",
+          foto_url: existente.foto_url || "",
           data_nascimento: existente.data_nascimento || "",
           rg: existente.rg || "",
           cpf: existente.cpf || "",
           pis: existente.pis || "",
           pix: existente.pix || "",
+          estado_civil: existente.estado_civil || "",
+          escolaridade: existente.escolaridade || "",
+          nome_mae: existente.nome_mae || "",
+          nome_pai: existente.nome_pai || "",
+          cep: existente.cep || "",
+          endereco: existente.endereco || "",
+          numero: existente.numero || "",
+          complemento: existente.complemento || "",
+          bairro: existente.bairro || "",
+          cidade: existente.cidade || "",
+          estado: existente.estado || "",
+          banco: existente.banco || "",
+          agencia: existente.agencia || "",
+          conta: existente.conta || "",
+          tipo_conta: existente.tipo_conta || "",
+          ctps_numero: existente.ctps_numero || "",
+          ctps_serie: existente.ctps_serie || "",
+          ctps_uf: existente.ctps_uf || "",
+          titulo_eleitor: existente.titulo_eleitor || "",
+          zona_eleitoral: existente.zona_eleitoral || "",
+          secao_eleitoral: existente.secao_eleitoral || "",
+          certidao_tipo: existente.certidao_tipo || "",
           nome_responsavel: existente.nome_responsavel || "",
           grau_parentesco: existente.grau_parentesco || "",
           rg_responsavel: existente.rg_responsavel || "",
           cpf_responsavel: existente.cpf_responsavel || "",
           email_responsavel: existente.email_responsavel || "",
-          data_inicio: existente.data_inicio || "",
-          remuneracao: existente.remuneracao ? String(existente.remuneracao) : "",
-          beneficios: existente.beneficios || "",
-          unidade: existente.unidade || "",
-          equipe: existente.equipe || "",
           is_estrangeiro: existente.is_estrangeiro || false,
           passaporte: existente.passaporte || "",
           pais_origem: existente.pais_origem || "",
           rne: existente.rne || "",
           visto_tipo: existente.visto_tipo || "",
           visto_validade: existente.visto_validade || "",
+          data_inicio: existente.data_inicio || "",
+          remuneracao: existente.remuneracao ? String(existente.remuneracao) : "",
+          beneficios: existente.beneficios || "",
+          unidade: existente.unidade || "",
+          equipe: existente.equipe || "",
+          dependentes: existente.dependentes || [],
         });
       }
       setLoading(false);
@@ -2224,6 +2357,9 @@ function ContratacaoModal({ candidato, empresaId, onFechar }) {
             </div>
           ) : (
             <>
+              {/* Gerar Link */}
+              <GerarLinkFormulario candidato={candidato} empresaId={empresaId} contratacaoId={contratacaoId}/>
+
               {/* Dados do candidato — somente leitura */}
               <div className="modal-section">👤 Dados do Candidato</div>
               <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 10, marginBottom: 4 }}>
@@ -2235,50 +2371,124 @@ function ContratacaoModal({ candidato, empresaId, onFechar }) {
                 ))}
               </div>
 
-              {/* Dados pessoais */}
-              <div className="modal-section">📋 Dados Pessoais</div>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-                <CampoContratacao form={form} onChange={handleChange} label="Data de Nascimento" name="data_nascimento" type="date"/>
-                <CampoContratacao form={form} onChange={handleChange} label="RG" name="rg" placeholder="00.000.000-0"/>
-                <CampoContratacao form={form} onChange={handleChange} label="CPF" name="cpf" placeholder="000.000.000-00"/>
-                <CampoContratacao form={form} onChange={handleChange} label="PIS" name="pis" placeholder="000.00000.00-0"/>
-                <CampoContratacao form={form} onChange={handleChange} label="PIX (chave)" name="pix" placeholder="CPF, e-mail ou telefone"/>
-                <CampoContratacao form={form} onChange={handleChange} label="Nome do Responsável" name="nome_responsavel" placeholder="Nome completo"/>
-                <CampoContratacao form={form} onChange={handleChange} label="Grau de Parentesco" name="grau_parentesco" placeholder="Ex: Mãe, Pai, Cônjuge..."/>
-              </div>
-
-              {/* Documento Estrangeiro */}
-              <div className="modal-section">🌍 Documento Estrangeiro</div>
-              <div style={{ marginBottom: 12 }}>
-                <label style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer", padding: "10px 14px", background: form.is_estrangeiro ? "rgba(159,122,234,0.1)" : "var(--bg3)", border: `1px solid ${form.is_estrangeiro ? "var(--green)" : "var(--border)"}`, borderRadius: "var(--radius-sm)", transition: "all .15s" }}>
-                  <input
-                    type="checkbox"
-                    name="is_estrangeiro"
-                    checked={form.is_estrangeiro || false}
-                    onChange={e => handleChange({ target: { name: "is_estrangeiro", value: e.target.checked } })}
-                    style={{ width: 16, height: 16, accentColor: "var(--green)", cursor: "pointer" }}
-                  />
-                  <span style={{ fontSize: 13, fontWeight: 600, color: "var(--text)" }}>Candidato estrangeiro</span>
-                  <span style={{ fontSize: 11, color: "var(--text3)", marginLeft: 4 }}>— preencha os campos abaixo se aplicável</span>
-                </label>
-              </div>
-              {form.is_estrangeiro && (
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, padding: "14px", background: "rgba(159,122,234,0.06)", border: "1px solid rgba(159,122,234,0.2)", borderRadius: "var(--radius-sm)", marginBottom: 12 }}>
-                  <CampoContratacao form={form} onChange={handleChange} label="Passaporte" name="passaporte" placeholder="Ex: AB123456"/>
-                  <CampoContratacao form={form} onChange={handleChange} label="País de Origem" name="pais_origem" placeholder="Ex: Argentina, Portugal..."/>
-                  <CampoContratacao form={form} onChange={handleChange} label="RNE / CRNM" name="rne" placeholder="Registro Nacional de Estrangeiro"/>
-                  <CampoContratacao form={form} onChange={handleChange} label="Tipo de Visto" name="visto_tipo" placeholder="Ex: Trabalho, Permanente, MERCOSUL..."/>
-                  <CampoContratacao form={form} onChange={handleChange} label="Validade do Visto" name="visto_validade" type="date"/>
+              {/* Foto do candidato */}
+              {form.foto_url && (
+                <div style={{ marginBottom: 12, display: "flex", alignItems: "center", gap: 14 }}>
+                  <img src={form.foto_url} alt="Foto" style={{ width: 80, height: 80, borderRadius: "50%", objectFit: "cover", border: "2px solid var(--green)" }}/>
+                  <div>
+                    <div style={{ fontSize: 12, fontWeight: 600 }}>📸 Foto do Candidato</div>
+                    <div style={{ fontSize: 11, color: "var(--text3)" }}>Enviada pelo candidato via formulário</div>
+                    <a href={form.foto_url} target="_blank" rel="noreferrer" style={{ fontSize: 11, color: "var(--green)" }}>Ver em tamanho original</a>
+                  </div>
                 </div>
               )}
 
-              {/* Dados responsável */}
-              <div className="modal-section">👨‍👩‍👧 Dados do Responsável</div>
+              {/* Tipo de Contrato */}
+              <div className="modal-section">📋 Tipo de Contrato</div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 4 }}>
+                <div className="form-group" style={{ gridColumn: "1/-1" }}>
+                  <label className="form-label">Tipo de Contrato</label>
+                  <select className="form-input" name="tipo_contrato" value={form.tipo_contrato||""} onChange={handleChange}>
+                    <option value="">Selecione</option>
+                    <option value="CLT">CLT</option>
+                    <option value="Estágio">Estágio</option>
+                    <option value="PJ">PJ</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Dados pessoais */}
+              <div className="modal-section">🪪 Dados Pessoais</div>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                <CampoContratacao form={form} onChange={handleChange} label="Data de Nascimento" name="data_nascimento" type="date"/>
+                <CampoContratacao form={form} onChange={handleChange} label="CPF" name="cpf" placeholder="000.000.000-00"/>
+                <CampoContratacao form={form} onChange={handleChange} label="RG" name="rg" placeholder="00.000.000-0"/>
+                <CampoContratacao form={form} onChange={handleChange} label="Estado Civil" name="estado_civil" type="select" options={["Solteiro(a)","Casado(a)","Divorciado(a)","Viúvo(a)","União estável"]}/>
+                <CampoContratacao form={form} onChange={handleChange} label="Escolaridade" name="escolaridade" type="select" options={["Ensino Fundamental","Ensino Médio","Ensino Superior Incompleto","Ensino Superior Completo","Pós-graduação","Mestrado","Doutorado"]}/>
+                <CampoContratacao form={form} onChange={handleChange} label="Nome da Mãe" name="nome_mae" placeholder="Nome completo"/>
+                <CampoContratacao form={form} onChange={handleChange} label="Nome do Pai" name="nome_pai" placeholder="Nome completo (ou N/A)"/>
+                <CampoContratacao form={form} onChange={handleChange} label="PIX (chave)" name="pix" placeholder="CPF, e-mail ou telefone"/>
+              </div>
+
+              {/* Endereço */}
+              <div className="modal-section">🏠 Endereço</div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                <CampoContratacao form={form} onChange={handleChange} label="CEP" name="cep" placeholder="00000-000"/>
+                <CampoContratacao form={form} onChange={handleChange} label="Endereço" name="endereco" placeholder="Rua, Avenida..."/>
+                <CampoContratacao form={form} onChange={handleChange} label="Número" name="numero" placeholder="Ex: 123"/>
+                <CampoContratacao form={form} onChange={handleChange} label="Complemento" name="complemento" placeholder="Apto, Bloco..."/>
+                <CampoContratacao form={form} onChange={handleChange} label="Bairro" name="bairro" placeholder="Bairro"/>
+                <CampoContratacao form={form} onChange={handleChange} label="Cidade" name="cidade" placeholder="Cidade"/>
+                <CampoContratacao form={form} onChange={handleChange} label="Estado" name="estado" placeholder="UF"/>
+              </div>
+
+              {/* Dados bancários */}
+              <div className="modal-section">🏦 Dados Bancários</div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                <CampoContratacao form={form} onChange={handleChange} label="Banco" name="banco" placeholder="Ex: Bradesco, Nubank..."/>
+                <CampoContratacao form={form} onChange={handleChange} label="Agência" name="agencia" placeholder="0000"/>
+                <CampoContratacao form={form} onChange={handleChange} label="Conta" name="conta" placeholder="00000-0"/>
+                <CampoContratacao form={form} onChange={handleChange} label="Tipo de Conta" name="tipo_conta" type="select" options={["Corrente","Poupança","Conta Salário"]}/>
+              </div>
+
+              {/* Documentos CLT */}
+              {form.tipo_contrato === "CLT" && (<>
+                <div className="modal-section">📗 Documentos CLT</div>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                  <CampoContratacao form={form} onChange={handleChange} label="PIS" name="pis" placeholder="000.00000.00-0"/>
+                  <CampoContratacao form={form} onChange={handleChange} label="Certidão" name="certidao_tipo" type="select" options={["Nascimento","Casamento"]}/>
+                  <CampoContratacao form={form} onChange={handleChange} label="Nº CTPS" name="ctps_numero" placeholder="Número"/>
+                  <CampoContratacao form={form} onChange={handleChange} label="Série CTPS" name="ctps_serie" placeholder="Série"/>
+                  <CampoContratacao form={form} onChange={handleChange} label="UF CTPS" name="ctps_uf" placeholder="Ex: SP"/>
+                  <CampoContratacao form={form} onChange={handleChange} label="Título de Eleitor" name="titulo_eleitor" placeholder="Número"/>
+                  <CampoContratacao form={form} onChange={handleChange} label="Zona Eleitoral" name="zona_eleitoral" placeholder="Zona"/>
+                  <CampoContratacao form={form} onChange={handleChange} label="Seção Eleitoral" name="secao_eleitoral" placeholder="Seção"/>
+                </div>
+              </>)}
+
+              {/* Documentos PJ */}
+              {form.tipo_contrato === "PJ" && (<>
+                <div className="modal-section">🏢 Dados PJ</div>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                  <CampoContratacao form={form} onChange={handleChange} label="CNPJ" name="cnpj" placeholder="00.000.000/0001-00"/>
+                  <CampoContratacao form={form} onChange={handleChange} label="Razão Social" name="razao_social" placeholder="Nome da empresa"/>
+                  <CampoContratacao form={form} onChange={handleChange} label="Tipo (MEI/LTDA...)" name="tipo_pj" placeholder="Ex: MEI, LTDA, SAS"/>
+                  <CampoContratacao form={form} onChange={handleChange} label="Banco PJ" name="banco_pj" placeholder="Banco da conta PJ"/>
+                  <CampoContratacao form={form} onChange={handleChange} label="Agência PJ" name="agencia_pj" placeholder="Agência PJ"/>
+                  <CampoContratacao form={form} onChange={handleChange} label="Conta PJ" name="conta_pj" placeholder="Conta PJ"/>
+                </div>
+              </>)}
+
+              {/* Responsável (menor de idade) */}
+              <div className="modal-section">👨‍👩‍👧 Responsável (Menor de Idade)</div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                <CampoContratacao form={form} onChange={handleChange} label="Nome do Responsável" name="nome_responsavel" placeholder="Nome completo"/>
+                <CampoContratacao form={form} onChange={handleChange} label="Grau de Parentesco" name="grau_parentesco" placeholder="Ex: Mãe, Pai"/>
                 <CampoContratacao form={form} onChange={handleChange} label="RG do Responsável" name="rg_responsavel" placeholder="00.000.000-0"/>
                 <CampoContratacao form={form} onChange={handleChange} label="CPF do Responsável" name="cpf_responsavel" placeholder="000.000.000-00"/>
                 <CampoContratacao form={form} onChange={handleChange} label="Email do Responsável" name="email_responsavel" type="email" placeholder="email@exemplo.com"/>
               </div>
+
+              {/* Estrangeiro */}
+              <div className="modal-section">🌍 Estrangeiro</div>
+              <div style={{ marginBottom: 12 }}>
+                <label style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer", padding: "10px 14px", background: form.is_estrangeiro ? "rgba(159,122,234,0.1)" : "var(--bg3)", border: `1px solid ${form.is_estrangeiro ? "var(--green)" : "var(--border)"}`, borderRadius: "var(--radius-sm)", transition: "all .15s" }}>
+                  <input type="checkbox" name="is_estrangeiro" checked={form.is_estrangeiro || false} onChange={e => handleChange({ target: { name: "is_estrangeiro", value: e.target.checked } })} style={{ width: 16, height: 16, accentColor: "var(--green)", cursor: "pointer" }}/>
+                  <span style={{ fontSize: 13, fontWeight: 600 }}>Candidato estrangeiro</span>
+                </label>
+              </div>
+              {form.is_estrangeiro && (
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, padding: 14, background: "rgba(159,122,234,0.06)", border: "1px solid rgba(159,122,234,0.2)", borderRadius: "var(--radius-sm)", marginBottom: 12 }}>
+                  <CampoContratacao form={form} onChange={handleChange} label="País de Origem" name="pais_origem" placeholder="Ex: Argentina, Portugal..."/>
+                  <CampoContratacao form={form} onChange={handleChange} label="RNE / CRNM" name="rne" placeholder="Registro Nacional Migratório"/>
+                  <CampoContratacao form={form} onChange={handleChange} label="Passaporte (opcional)" name="passaporte" placeholder="Ex: AB123456"/>
+                  <CampoContratacao form={form} onChange={handleChange} label="Tipo de Visto (opcional)" name="visto_tipo" placeholder="Ex: Permanente, MERCOSUL..."/>
+                  <CampoContratacao form={form} onChange={handleChange} label="Validade do Visto (opcional)" name="visto_validade" type="date"/>
+                </div>
+              )}
+
+              {/* Dependentes */}
+              <SecaoDependentes form={form} setForm={setForm}/>
 
               {/* Dados contratuais */}
               <div className="modal-section">📝 Dados Contratuais</div>
@@ -3145,6 +3355,332 @@ function AccessDenied() {
 // ============================================================
 // APP ROOT
 // ============================================================
+
+// ============================================================
+// FORMULÁRIO PÚBLICO DO CANDIDATO
+// ============================================================
+function FormularioCandidato({ token }) {
+  const SB_BUCKET = "documentos-contratacao";
+  const [estado, setEstado] = React.useState("carregando"); // carregando | preenchendo | enviado | invalido
+  const [contratacao, setContratacao] = React.useState(null);
+  const [form, setForm] = React.useState({
+    data_nascimento: "", rg: "", cpf: "", pis: "", pix: "",
+    estado_civil: "", escolaridade: "", nome_mae: "", nome_pai: "",
+    cep: "", endereco: "", numero: "", complemento: "", bairro: "", cidade: "", estado: "",
+    banco: "", agencia: "", conta: "", tipo_conta: "",
+    ctps_numero: "", ctps_serie: "", ctps_uf: "",
+    titulo_eleitor: "", zona_eleitoral: "", secao_eleitoral: "",
+    certidao_tipo: "", cnpj: "", razao_social: "", tipo_pj: "",
+    banco_pj: "", agencia_pj: "", conta_pj: "",
+    is_estrangeiro: false, passaporte: "", pais_origem: "", rne: "", visto_tipo: "", visto_validade: "",
+    nome_responsavel: "", grau_parentesco: "", rg_responsavel: "", cpf_responsavel: "", email_responsavel: "",
+    dependentes: [],
+  });
+  const [foto, setFoto] = React.useState(null);
+  const [fotoPreview, setFotoPreview] = React.useState(null);
+  const [documentos, setDocumentos] = React.useState([]);
+  const [uploading, setUploading] = React.useState(false);
+  const [salvando, setSalvando] = React.useState(false);
+  const fotoRef = React.useRef();
+  const docRef = React.useRef();
+
+  React.useEffect(() => {
+    const load = async () => {
+      const r = await fetch(`${SB_URL}/rest/v1/contratacoes?token_formulario=eq.${token}&select=*,candidatos(nome,email,telefone,vaga)`, {
+        headers: { "apikey": SB_KEY, "Authorization": `Bearer ${SB_KEY}` }
+      });
+      const data = await r.json();
+      if (!Array.isArray(data) || !data[0]) { setEstado("invalido"); return; }
+      const c = data[0];
+      if (c.token_expira && new Date(c.token_expira) < new Date()) { setEstado("invalido"); return; }
+      setContratacao(c);
+      // Pre-fill if already has data
+      if (c.cpf) setForm(f => ({ ...f,
+        data_nascimento: c.data_nascimento||"", rg: c.rg||"", cpf: c.cpf||"",
+        pis: c.pis||"", pix: c.pix||"", estado_civil: c.estado_civil||"",
+        escolaridade: c.escolaridade||"", nome_mae: c.nome_mae||"", nome_pai: c.nome_pai||"",
+        cep: c.cep||"", endereco: c.endereco||"", numero: c.numero||"",
+        complemento: c.complemento||"", bairro: c.bairro||"", cidade: c.cidade||"", estado: c.estado||"",
+        banco: c.banco||"", agencia: c.agencia||"", conta: c.conta||"", tipo_conta: c.tipo_conta||"",
+        ctps_numero: c.ctps_numero||"", ctps_serie: c.ctps_serie||"", ctps_uf: c.ctps_uf||"",
+        titulo_eleitor: c.titulo_eleitor||"", zona_eleitoral: c.zona_eleitoral||"", secao_eleitoral: c.secao_eleitoral||"",
+        certidao_tipo: c.certidao_tipo||"", cnpj: c.cnpj||"", razao_social: c.razao_social||"",
+        tipo_pj: c.tipo_pj||"", banco_pj: c.banco_pj||"", agencia_pj: c.agencia_pj||"", conta_pj: c.conta_pj||"",
+        is_estrangeiro: c.is_estrangeiro||false, passaporte: c.passaporte||"", pais_origem: c.pais_origem||"",
+        rne: c.rne||"", visto_tipo: c.visto_tipo||"", visto_validade: c.visto_validade||"",
+        nome_responsavel: c.nome_responsavel||"", grau_parentesco: c.grau_parentesco||"",
+        rg_responsavel: c.rg_responsavel||"", cpf_responsavel: c.cpf_responsavel||"",
+        email_responsavel: c.email_responsavel||"", dependentes: c.dependentes||[],
+      }));
+      if (c.foto_url) setFotoPreview(c.foto_url);
+      if (c.documentos) setDocumentos(c.documentos);
+      setEstado("preenchendo");
+    };
+    load();
+  }, [token]);
+
+  const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
+
+  const handleFoto = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    setFoto(file);
+    setFotoPreview(URL.createObjectURL(file));
+  };
+
+  const handleDocs = async (files) => {
+    const allowed = ["application/pdf","image/jpeg","image/png","image/webp"];
+    const validos = Array.from(files).filter(f => allowed.includes(f.type));
+    if (!validos.length) return;
+    setUploading(true);
+    const novos = [...documentos];
+    for (const file of validos) {
+      const path = `${contratacao.candidato_id}/${Date.now()}_${file.name}`;
+      const up = await fetch(`${SB_URL}/storage/v1/object/${SB_BUCKET}/${path}`, {
+        method: "POST",
+        headers: { "apikey": SB_KEY, "Authorization": `Bearer ${SB_KEY}`, "Content-Type": file.type, "x-upsert": "true" },
+        body: file
+      });
+      if (up.ok) novos.push({ id: Date.now(), path, url: `${SB_URL}/storage/v1/object/public/${SB_BUCKET}/${path}`, nome: file.name, tipo: file.type, tamanho: file.size });
+    }
+    setDocumentos(novos);
+    setUploading(false);
+  };
+
+  const enviar = async () => {
+    setSalvando(true);
+    let foto_url = fotoPreview && !foto ? fotoPreview : null;
+    if (foto) {
+      const path = `${contratacao.candidato_id}/foto_${Date.now()}.jpg`;
+      const up = await fetch(`${SB_URL}/storage/v1/object/${SB_BUCKET}/${path}`, {
+        method: "POST", headers: { "apikey": SB_KEY, "Authorization": `Bearer ${SB_KEY}`, "Content-Type": foto.type, "x-upsert": "true" }, body: foto
+      });
+      if (up.ok) foto_url = `${SB_URL}/storage/v1/object/public/${SB_BUCKET}/${path}`;
+    }
+    await fetch(`${SB_URL}/rest/v1/contratacoes?id=eq.${contratacao.id}`, {
+      method: "PATCH",
+      headers: { "apikey": SB_KEY, "Authorization": `Bearer ${SB_KEY}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ ...form, foto_url, documentos, formulario_preenchido: true, updated_at: new Date().toISOString() })
+    });
+    setSalvando(false);
+    setEstado("enviado");
+  };
+
+  const candidato = contratacao?.candidatos || {};
+  const tipoContrato = contratacao?.tipo_contrato || "";
+
+  const inp = { width: "100%", padding: "10px 12px", background: "#1a1d2e", border: "1px solid #2e3350", borderRadius: 8, color: "#e2e8f0", fontSize: 14, outline: "none", boxSizing: "border-box" };
+  const sel = { ...inp };
+  const lbl = { fontSize: 12, fontWeight: 600, color: "#94a3b8", marginBottom: 4, display: "block", textTransform: "uppercase", letterSpacing: ".04em" };
+  const sec = { fontSize: 13, fontWeight: 700, color: "#10d9a0", borderBottom: "1px solid #2e3350", paddingBottom: 8, marginBottom: 14, marginTop: 20 };
+  const grid2 = { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 };
+
+  if (estado === "carregando") return (
+    <div style={{ minHeight: "100vh", background: "#0d0f1a", display: "flex", alignItems: "center", justifyContent: "center" }}>
+      <div style={{ color: "#94a3b8", fontSize: 14 }}>⏳ Carregando formulário...</div>
+    </div>
+  );
+
+  if (estado === "invalido") return (
+    <div style={{ minHeight: "100vh", background: "#0d0f1a", display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
+      <div style={{ textAlign: "center", maxWidth: 400 }}>
+        <div style={{ fontSize: 48, marginBottom: 16 }}>⚠️</div>
+        <div style={{ fontWeight: 700, fontSize: 18, color: "#e2e8f0", marginBottom: 8 }}>Link inválido ou expirado</div>
+        <div style={{ color: "#94a3b8", fontSize: 14 }}>Este link não é mais válido. Entre em contato com o RH para solicitar um novo link.</div>
+      </div>
+    </div>
+  );
+
+  if (estado === "enviado") return (
+    <div style={{ minHeight: "100vh", background: "#0d0f1a", display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
+      <div style={{ textAlign: "center", maxWidth: 400 }}>
+        <div style={{ fontSize: 56, marginBottom: 16 }}>✅</div>
+        <div style={{ fontWeight: 800, fontSize: 20, color: "#10d9a0", marginBottom: 8 }}>Formulário enviado!</div>
+        <div style={{ color: "#94a3b8", fontSize: 14 }}>Seus dados foram recebidos com sucesso. O RH entrará em contato em breve.</div>
+      </div>
+    </div>
+  );
+
+  return (
+    <div style={{ minHeight: "100vh", background: "#0d0f1a", color: "#e2e8f0", fontFamily: "Inter, sans-serif" }}>
+      {/* Header */}
+      <div style={{ background: "#131626", borderBottom: "1px solid #1e2235", padding: "16px 24px", display: "flex", alignItems: "center", gap: 12, position: "sticky", top: 0, zIndex: 10 }}>
+        <div style={{ fontWeight: 900, fontSize: 18, color: "#fff" }}>HR<span style={{ color: "#10d9a0" }}>S</span></div>
+        <div style={{ fontSize: 11, color: "#94a3b8" }}>Formulário de Admissão</div>
+      </div>
+
+      <div style={{ maxWidth: 680, margin: "0 auto", padding: "24px 16px 60px" }}>
+        {/* Boas vindas */}
+        <div style={{ background: "rgba(16,217,160,0.07)", border: "1px solid rgba(16,217,160,0.2)", borderRadius: 12, padding: "16px 20px", marginBottom: 24 }}>
+          <div style={{ fontWeight: 700, fontSize: 15, color: "#10d9a0" }}>Olá, {candidato.nome || "Candidato"}! 👋</div>
+          <div style={{ fontSize: 13, color: "#94a3b8", marginTop: 4 }}>Preencha seus dados abaixo para concluir sua admissão. Todos os campos marcados são importantes.</div>
+          {tipoContrato && <div style={{ marginTop: 8, fontSize: 12, fontWeight: 600, color: "#fff", background: "rgba(16,217,160,0.15)", display: "inline-block", padding: "2px 10px", borderRadius: 20 }}>📄 Contrato: {tipoContrato}</div>}
+        </div>
+
+        {/* Foto */}
+        <div style={sec}>📸 Sua Foto</div>
+        <div style={{ display: "flex", alignItems: "center", gap: 16, marginBottom: 4 }}>
+          <div style={{ width: 80, height: 80, borderRadius: "50%", background: "#1e2235", border: "2px dashed #2e3350", overflow: "hidden", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+            {fotoPreview ? <img src={fotoPreview} alt="Foto" style={{ width: "100%", height: "100%", objectFit: "cover" }}/> : <span style={{ fontSize: 28 }}>👤</span>}
+          </div>
+          <div>
+            <input ref={fotoRef} type="file" accept="image/*" capture="user" style={{ display: "none" }} onChange={handleFoto}/>
+            <button onClick={() => fotoRef.current?.click()} style={{ padding: "8px 16px", background: "#10d9a0", color: "#000", border: "none", borderRadius: 8, fontWeight: 700, fontSize: 13, cursor: "pointer", marginBottom: 6, display: "block" }}>
+              📷 {fotoPreview ? "Trocar foto" : "Tirar / Enviar foto"}
+            </button>
+            <div style={{ fontSize: 11, color: "#64748b" }}>Pode tirar uma foto ou fazer upload de uma imagem</div>
+          </div>
+        </div>
+
+        {/* Dados pessoais */}
+        <div style={sec}>🪪 Dados Pessoais</div>
+        <div style={grid2}>
+          <div><label style={lbl}>Data de Nascimento</label><input type="date" style={inp} value={form.data_nascimento} onChange={e => set("data_nascimento",e.target.value)}/></div>
+          <div><label style={lbl}>CPF *</label><input style={inp} value={form.cpf} onChange={e => set("cpf",e.target.value)} placeholder="000.000.000-00"/></div>
+          <div><label style={lbl}>RG *</label><input style={inp} value={form.rg} onChange={e => set("rg",e.target.value)} placeholder="00.000.000-0"/></div>
+          <div><label style={lbl}>Estado Civil</label><select style={sel} value={form.estado_civil} onChange={e => set("estado_civil",e.target.value)}><option value="">Selecione</option>{["Solteiro(a)","Casado(a)","Divorciado(a)","Viúvo(a)","União estável"].map(o=><option key={o}>{o}</option>)}</select></div>
+          <div><label style={lbl}>Escolaridade</label><select style={sel} value={form.escolaridade} onChange={e => set("escolaridade",e.target.value)}><option value="">Selecione</option>{["Ensino Fundamental","Ensino Médio","Ensino Superior Incompleto","Ensino Superior Completo","Pós-graduação","Mestrado","Doutorado"].map(o=><option key={o}>{o}</option>)}</select></div>
+          <div><label style={lbl}>Nome da Mãe</label><input style={inp} value={form.nome_mae} onChange={e => set("nome_mae",e.target.value)} placeholder="Nome completo"/></div>
+          <div><label style={lbl}>Nome do Pai</label><input style={inp} value={form.nome_pai} onChange={e => set("nome_pai",e.target.value)} placeholder="Nome completo (ou N/A)"/></div>
+          <div><label style={lbl}>Chave PIX</label><input style={inp} value={form.pix} onChange={e => set("pix",e.target.value)} placeholder="CPF, e-mail ou telefone"/></div>
+        </div>
+
+        {/* Endereço */}
+        <div style={sec}>🏠 Endereço</div>
+        <div style={grid2}>
+          <div><label style={lbl}>CEP</label><input style={inp} value={form.cep} onChange={e => set("cep",e.target.value)} placeholder="00000-000"/></div>
+          <div><label style={lbl}>Endereço</label><input style={inp} value={form.endereco} onChange={e => set("endereco",e.target.value)} placeholder="Rua, Avenida..."/></div>
+          <div><label style={lbl}>Número</label><input style={inp} value={form.numero} onChange={e => set("numero",e.target.value)} placeholder="123"/></div>
+          <div><label style={lbl}>Complemento</label><input style={inp} value={form.complemento} onChange={e => set("complemento",e.target.value)} placeholder="Apto, Bloco..."/></div>
+          <div><label style={lbl}>Bairro</label><input style={inp} value={form.bairro} onChange={e => set("bairro",e.target.value)} placeholder="Bairro"/></div>
+          <div><label style={lbl}>Cidade</label><input style={inp} value={form.cidade} onChange={e => set("cidade",e.target.value)} placeholder="Cidade"/></div>
+          <div><label style={lbl}>Estado (UF)</label><input style={inp} value={form.estado} onChange={e => set("estado",e.target.value)} placeholder="SP"/></div>
+        </div>
+
+        {/* Dados bancários */}
+        <div style={sec}>🏦 Dados Bancários</div>
+        <div style={grid2}>
+          <div><label style={lbl}>Banco</label><input style={inp} value={form.banco} onChange={e => set("banco",e.target.value)} placeholder="Ex: Nubank, Bradesco..."/></div>
+          <div><label style={lbl}>Tipo de Conta</label><select style={sel} value={form.tipo_conta} onChange={e => set("tipo_conta",e.target.value)}><option value="">Selecione</option>{["Corrente","Poupança","Conta Salário"].map(o=><option key={o}>{o}</option>)}</select></div>
+          <div><label style={lbl}>Agência</label><input style={inp} value={form.agencia} onChange={e => set("agencia",e.target.value)} placeholder="0000"/></div>
+          <div><label style={lbl}>Conta</label><input style={inp} value={form.conta} onChange={e => set("conta",e.target.value)} placeholder="00000-0"/></div>
+        </div>
+
+        {/* CLT */}
+        {tipoContrato === "CLT" && (<>
+          <div style={sec}>📗 Documentos CLT</div>
+          <div style={grid2}>
+            <div><label style={lbl}>PIS</label><input style={inp} value={form.pis} onChange={e => set("pis",e.target.value)} placeholder="000.00000.00-0"/></div>
+            <div><label style={lbl}>Certidão</label><select style={sel} value={form.certidao_tipo} onChange={e => set("certidao_tipo",e.target.value)}><option value="">Selecione</option><option>Nascimento</option><option>Casamento</option></select></div>
+            <div><label style={lbl}>Nº CTPS</label><input style={inp} value={form.ctps_numero} onChange={e => set("ctps_numero",e.target.value)} placeholder="Número"/></div>
+            <div><label style={lbl}>Série CTPS</label><input style={inp} value={form.ctps_serie} onChange={e => set("ctps_serie",e.target.value)} placeholder="Série"/></div>
+            <div><label style={lbl}>UF CTPS</label><input style={inp} value={form.ctps_uf} onChange={e => set("ctps_uf",e.target.value)} placeholder="SP"/></div>
+            <div><label style={lbl}>Título de Eleitor</label><input style={inp} value={form.titulo_eleitor} onChange={e => set("titulo_eleitor",e.target.value)} placeholder="Número"/></div>
+            <div><label style={lbl}>Zona Eleitoral</label><input style={inp} value={form.zona_eleitoral} onChange={e => set("zona_eleitoral",e.target.value)} placeholder="Zona"/></div>
+            <div><label style={lbl}>Seção Eleitoral</label><input style={inp} value={form.secao_eleitoral} onChange={e => set("secao_eleitoral",e.target.value)} placeholder="Seção"/></div>
+          </div>
+        </>)}
+
+        {/* Estágio */}
+        {tipoContrato === "Estágio" && (<>
+          <div style={sec}>📘 Documentos — Estágio</div>
+          <div style={{ fontSize: 12, color: "#94a3b8", marginBottom: 12 }}>Para estágio são necessários: RG, CPF e comprovante de residência (já preenchidos acima). Se menor de idade, preencha os dados do responsável abaixo.</div>
+        </>)}
+
+        {/* PJ */}
+        {tipoContrato === "PJ" && (<>
+          <div style={sec}>🏢 Dados PJ</div>
+          <div style={grid2}>
+            <div><label style={lbl}>CNPJ</label><input style={inp} value={form.cnpj} onChange={e => set("cnpj",e.target.value)} placeholder="00.000.000/0001-00"/></div>
+            <div><label style={lbl}>Razão Social</label><input style={inp} value={form.razao_social} onChange={e => set("razao_social",e.target.value)} placeholder="Nome da empresa"/></div>
+            <div><label style={lbl}>Tipo (MEI/LTDA...)</label><input style={inp} value={form.tipo_pj} onChange={e => set("tipo_pj",e.target.value)} placeholder="MEI, LTDA, SAS..."/></div>
+            <div><label style={lbl}>Banco PJ</label><input style={inp} value={form.banco_pj} onChange={e => set("banco_pj",e.target.value)} placeholder="Banco da conta PJ"/></div>
+            <div><label style={lbl}>Agência PJ</label><input style={inp} value={form.agencia_pj} onChange={e => set("agencia_pj",e.target.value)} placeholder="Agência PJ"/></div>
+            <div><label style={lbl}>Conta PJ</label><input style={inp} value={form.conta_pj} onChange={e => set("conta_pj",e.target.value)} placeholder="Conta PJ"/></div>
+          </div>
+        </>)}
+
+        {/* Responsável */}
+        <div style={sec}>👨‍👩‍👧 Responsável (Menor de Idade)</div>
+        <div style={{ fontSize: 12, color: "#94a3b8", marginBottom: 12 }}>Preencha apenas se o candidato for menor de idade.</div>
+        <div style={grid2}>
+          <div><label style={lbl}>Nome do Responsável</label><input style={inp} value={form.nome_responsavel} onChange={e => set("nome_responsavel",e.target.value)} placeholder="Nome completo"/></div>
+          <div><label style={lbl}>Grau de Parentesco</label><input style={inp} value={form.grau_parentesco} onChange={e => set("grau_parentesco",e.target.value)} placeholder="Ex: Mãe, Pai"/></div>
+          <div><label style={lbl}>RG do Responsável</label><input style={inp} value={form.rg_responsavel} onChange={e => set("rg_responsavel",e.target.value)} placeholder="00.000.000-0"/></div>
+          <div><label style={lbl}>CPF do Responsável</label><input style={inp} value={form.cpf_responsavel} onChange={e => set("cpf_responsavel",e.target.value)} placeholder="000.000.000-00"/></div>
+        </div>
+
+        {/* Estrangeiro */}
+        <div style={sec}>🌍 Estrangeiro</div>
+        <label style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer", marginBottom: 12 }}>
+          <input type="checkbox" checked={form.is_estrangeiro} onChange={e => set("is_estrangeiro",e.target.checked)} style={{ width: 16, height: 16 }}/>
+          <span style={{ fontSize: 13, color: "#e2e8f0" }}>Sou estrangeiro</span>
+        </label>
+        {form.is_estrangeiro && (
+          <div style={{ ...grid2, padding: 14, background: "rgba(159,122,234,0.06)", border: "1px solid rgba(159,122,234,0.2)", borderRadius: 10, marginBottom: 8 }}>
+            <div><label style={lbl}>País de Origem *</label><input style={inp} value={form.pais_origem} onChange={e => set("pais_origem",e.target.value)} placeholder="Ex: Argentina"/></div>
+            <div><label style={lbl}>RNE / CRNM *</label><input style={inp} value={form.rne} onChange={e => set("rne",e.target.value)} placeholder="Registro Migratório"/></div>
+            <div><label style={lbl}>Passaporte (opcional)</label><input style={inp} value={form.passaporte} onChange={e => set("passaporte",e.target.value)} placeholder="Ex: AB123456"/></div>
+            <div><label style={lbl}>Tipo de Visto (opcional)</label><input style={inp} value={form.visto_tipo} onChange={e => set("visto_tipo",e.target.value)} placeholder="Permanente, MERCOSUL..."/></div>
+            <div><label style={lbl}>Validade do Visto (opcional)</label><input type="date" style={inp} value={form.visto_validade} onChange={e => set("visto_validade",e.target.value)}/></div>
+          </div>
+        )}
+
+        {/* Dependentes */}
+        <div style={sec}>👨‍👩‍👦 Dependentes</div>
+        {(form.dependentes||[]).map((d,i) => (
+          <div key={d.id} style={{ background: "#131626", border: "1px solid #2e3350", borderRadius: 10, padding: 14, marginBottom: 10 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 10 }}>
+              <span style={{ fontSize: 12, fontWeight: 700, color: "#94a3b8" }}>Dependente {i+1}</span>
+              <button onClick={() => set("dependentes",(form.dependentes||[]).filter(x=>x.id!==d.id))} style={{ fontSize: 11, color: "#f04747", background: "transparent", border: "none", cursor: "pointer" }}>Remover</button>
+            </div>
+            <div style={grid2}>
+              <div><label style={lbl}>Nome</label><input style={inp} value={d.nome} onChange={e => set("dependentes",(form.dependentes||[]).map(x=>x.id===d.id?{...x,nome:e.target.value}:x))} placeholder="Nome completo"/></div>
+              <div><label style={lbl}>Parentesco</label><select style={sel} value={d.parentesco} onChange={e => set("dependentes",(form.dependentes||[]).map(x=>x.id===d.id?{...x,parentesco:e.target.value}:x))}><option value="">Selecione</option>{["Filho(a)","Cônjuge","Companheiro(a)","Pai","Mãe","Enteado(a)","Tutelado(a)"].map(o=><option key={o}>{o}</option>)}</select></div>
+              <div><label style={lbl}>CPF</label><input style={inp} value={d.cpf} onChange={e => set("dependentes",(form.dependentes||[]).map(x=>x.id===d.id?{...x,cpf:e.target.value}:x))} placeholder="000.000.000-00"/></div>
+              <div><label style={lbl}>Nascimento</label><input type="date" style={inp} value={d.data_nascimento} onChange={e => set("dependentes",(form.dependentes||[]).map(x=>x.id===d.id?{...x,data_nascimento:e.target.value}:x))}/></div>
+            </div>
+          </div>
+        ))}
+        <button onClick={() => set("dependentes",[...(form.dependentes||[]),{id:Date.now(),nome:"",parentesco:"",cpf:"",data_nascimento:""}])}
+          style={{ width: "100%", padding: "10px", border: "1px dashed #2e3350", borderRadius: 8, background: "transparent", color: "#10d9a0", fontSize: 13, fontWeight: 600, cursor: "pointer", marginBottom: 4 }}>
+          + Adicionar Dependente
+        </button>
+
+        {/* Documentos */}
+        <div style={sec}>📎 Documentos</div>
+        <div style={{ fontSize: 12, color: "#94a3b8", marginBottom: 10 }}>
+          {tipoContrato === "CLT" && "Envie: RG, CPF, CTPS, comprovante de residência, certidão de nascimento/casamento, comprovante de escolaridade, PIS e título de eleitor (frente e verso)."}
+          {tipoContrato === "Estágio" && "Envie: RG, CPF e comprovante de residência. Se menor de idade, também o documento do responsável."}
+          {tipoContrato === "PJ" && "Envie: RG, CPF, contrato social ou MEI e comprovante de endereço da empresa."}
+          {!tipoContrato && "Envie seus documentos pessoais."}
+        </div>
+        <input ref={docRef} type="file" multiple accept=".pdf,.jpg,.jpeg,.png,.webp" capture="environment" style={{ display: "none" }} onChange={e => handleDocs(e.target.files)}/>
+        <div onClick={() => docRef.current?.click()} style={{ border: "2px dashed #2e3350", borderRadius: 10, padding: 20, textAlign: "center", cursor: "pointer", marginBottom: 12 }}>
+          {uploading ? <div style={{ color: "#94a3b8" }}>⏳ Enviando...</div> : <><div style={{ fontSize: 28, marginBottom: 6 }}>📤</div><div style={{ fontSize: 13, color: "#94a3b8" }}>Toque para <strong style={{ color: "#10d9a0" }}>enviar documentos</strong></div><div style={{ fontSize: 11, color: "#64748b", marginTop: 4 }}>PDF, JPG, PNG ou WebP · Pode tirar foto com a câmera</div></>}
+        </div>
+        {documentos.map(doc => (
+          <div key={doc.id} style={{ display: "flex", alignItems: "center", gap: 10, background: "#131626", border: "1px solid #2e3350", borderRadius: 8, padding: "8px 12px", marginBottom: 6 }}>
+            <span style={{ fontSize: 18 }}>{doc.tipo?.includes("pdf") ? "📄" : "🖼️"}</span>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 12, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{doc.nome}</div>
+              <div style={{ fontSize: 10, color: "#64748b" }}>{(doc.tamanho/1024).toFixed(1)} KB</div>
+            </div>
+            <button onClick={() => setDocumentos(d => d.filter(x=>x.id!==doc.id))} style={{ color: "#f04747", background: "transparent", border: "none", cursor: "pointer", fontSize: 16 }}>✕</button>
+          </div>
+        ))}
+
+        {/* Enviar */}
+        <button onClick={enviar} disabled={salvando || !form.cpf || !form.rg}
+          style={{ width: "100%", padding: "14px", background: salvando ? "#2e3350" : "#10d9a0", color: salvando ? "#94a3b8" : "#000", border: "none", borderRadius: 10, fontWeight: 800, fontSize: 15, cursor: salvando ? "not-allowed" : "pointer", marginTop: 20 }}>
+          {salvando ? "⏳ Enviando..." : "✅ Enviar Formulário"}
+        </button>
+        <div style={{ fontSize: 11, color: "#64748b", textAlign: "center", marginTop: 10 }}>Seus dados são protegidos e utilizados apenas para fins de admissão.</div>
+      </div>
+    </div>
+  );
+}
+
 function App() {
   const [user, setUser] = React.useState(null);
   const [empresaMaster, setEmpresaMaster] = React.useState(null);
@@ -3155,6 +3691,11 @@ function App() {
     setEmpresaMaster(emp);
     setUser(u => ({ ...u, empresa_id: emp.id, empresa_nome: emp.nome, empresa_codigo: emp.codigo, perfil: "master" }));
   };
+
+  // Formulário público do candidato (sem login)
+  const params = new URLSearchParams(window.location.search);
+  const tokenFormulario = params.get("formulario");
+  if (tokenFormulario) return <FormularioCandidato token={tokenFormulario}/>;
 
   if (!user) return <LoginPage onLogin={handleLogin}/>;
   if (user.perfil === "master" && !empresaMaster) return <MasterDashboard onEntrarEmpresa={entrarEmpresa} onLogout={handleLogout}/>;
