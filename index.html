@@ -2125,7 +2125,7 @@ function GerarLinkFormulario({ candidato, empresaId, contratacaoId }) {
 
   const gerarLink = async () => {
     setGerando(true);
-    const token = btoa(`${candidato.id}__${empresaId}__${Date.now()}`).replace(/=/g,"").replace(/\+/g,"-").replace(/\//g,"_");
+    const token = `${candidato.id.replace(/-/g,"")}_${empresaId.replace(/-/g,"")}_${Date.now()}`;
     const expira = new Date(Date.now() + 7*24*60*60*1000).toISOString();
     const payload = { candidato_id: candidato.id, empresa_id: empresaId, token_formulario: token, token_expira: expira };
 
