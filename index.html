@@ -2213,7 +2213,7 @@ function ContratacaoModal({ candidato, empresaId, onFechar }) {
     // Dados pessoais
     tipo_contrato: "", foto_url: "",
     data_nascimento: "", rg: "", cpf: "", pis: "", pix: "",
-    estado_civil: "", escolaridade: "", nome_mae: "", nome_pai: "",
+    estado_civil: "", escolaridade: "", curso_superior: "", curso_semestre: "", curso_modalidade: "", nome_mae: "", nome_pai: "",
     cep: "", endereco: "", numero: "", complemento: "", bairro: "", cidade: "", estado: "",
     banco: "", agencia: "", conta: "", tipo_conta: "",
     ctps_numero: "", ctps_serie: "", ctps_uf: "",
@@ -2259,6 +2259,9 @@ function ContratacaoModal({ candidato, empresaId, onFechar }) {
           pix: existente.pix || "",
           estado_civil: existente.estado_civil || "",
           escolaridade: existente.escolaridade || "",
+          curso_superior: existente.curso_superior || "",
+          curso_semestre: existente.curso_semestre || "",
+          curso_modalidade: existente.curso_modalidade || "",
           nome_mae: existente.nome_mae || "",
           nome_pai: existente.nome_pai || "",
           cep: existente.cep || "",
@@ -2295,6 +2298,8 @@ function ContratacaoModal({ candidato, empresaId, onFechar }) {
           beneficios: existente.beneficios || "",
           unidade: existente.unidade || "",
           equipe: existente.equipe || "",
+          conducao_valor: existente.conducao_valor || "",
+          conducao_integracao: existente.conducao_integracao || "",
           dependentes: existente.dependentes || [],
         });
       }
@@ -2424,6 +2429,11 @@ function ContratacaoModal({ candidato, empresaId, onFechar }) {
                 <CampoContratacao form={form} onChange={handleChange} label="RG" name="rg" placeholder="00.000.000-0"/>
                 <CampoContratacao form={form} onChange={handleChange} label="Estado Civil" name="estado_civil" type="select" options={["Solteiro(a)","Casado(a)","Divorciado(a)","Viúvo(a)","União estável"]}/>
                 <CampoContratacao form={form} onChange={handleChange} label="Escolaridade" name="escolaridade" type="select" options={["Ensino Fundamental","Ensino Médio","Ensino Superior Incompleto","Ensino Superior Completo","Pós-graduação","Mestrado","Doutorado"]}/>
+                {(form.escolaridade === "Ensino Superior Incompleto") && (<>
+                  <CampoContratacao form={form} onChange={handleChange} label="Curso" name="curso_superior" placeholder="Ex: Administração, TI..."/>
+                  <CampoContratacao form={form} onChange={handleChange} label="Semestre" name="curso_semestre" placeholder="Ex: 3º semestre"/>
+                  <CampoContratacao form={form} onChange={handleChange} label="Modalidade" name="curso_modalidade" type="select" options={["Presencial","Online","Híbrido"]}/>
+                </>)}
                 <CampoContratacao form={form} onChange={handleChange} label="Nome da Mãe" name="nome_mae" placeholder="Nome completo"/>
                 <CampoContratacao form={form} onChange={handleChange} label="Nome do Pai" name="nome_pai" placeholder="Nome completo (ou N/A)"/>
                 <CampoContratacao form={form} onChange={handleChange} label="PIX (chave)" name="pix" placeholder="CPF, e-mail ou telefone"/>
@@ -2516,6 +2526,8 @@ function ContratacaoModal({ candidato, empresaId, onFechar }) {
                 <CampoContratacao form={form} onChange={handleChange} label="Remuneração (R$)" name="remuneracao" type="number" placeholder="0.00"/>
                 <CampoContratacao form={form} onChange={handleChange} label="Unidade" name="unidade" placeholder="Nome da unidade"/>
                 <CampoContratacao form={form} onChange={handleChange} label="Equipe" name="equipe" placeholder="Nome da equipe"/>
+                <CampoContratacao form={form} onChange={handleChange} label="Vale Condução (R$ ida+volta)" name="conducao_valor" placeholder="Ex: 10,40"/>
+                <CampoContratacao form={form} onChange={handleChange} label="Integração de ônibus?" name="conducao_integracao" type="select" options={["Sim","Não","Parcial"]}/>
                 <CampoContratacao form={form} onChange={handleChange} label="Benefícios" name="beneficios" type="textarea" placeholder="Vale-refeição, plano de saúde..." span2/>
               </div>
 
@@ -3384,7 +3396,7 @@ function FormularioCandidato({ token }) {
   const [contratacao, setContratacao] = React.useState(null);
   const [form, setForm] = React.useState({
     data_nascimento: "", rg: "", cpf: "", pis: "", pix: "",
-    estado_civil: "", escolaridade: "", nome_mae: "", nome_pai: "",
+    estado_civil: "", escolaridade: "", curso_superior: "", curso_semestre: "", curso_modalidade: "", nome_mae: "", nome_pai: "",
     cep: "", endereco: "", numero: "", complemento: "", bairro: "", cidade: "", estado: "",
     banco: "", agencia: "", conta: "", tipo_conta: "",
     ctps_numero: "", ctps_serie: "", ctps_uf: "",
@@ -3393,6 +3405,7 @@ function FormularioCandidato({ token }) {
     banco_pj: "", agencia_pj: "", conta_pj: "",
     is_estrangeiro: false, passaporte: "", pais_origem: "", rne: "", visto_tipo: "", visto_validade: "",
     nome_responsavel: "", grau_parentesco: "", rg_responsavel: "", cpf_responsavel: "", email_responsavel: "",
+    conducao_valor: "", conducao_integracao: "",
     dependentes: [],
   });
   const [foto, setFoto] = React.useState(null);
@@ -3567,6 +3580,11 @@ function FormularioCandidato({ token }) {
           <div><label style={lbl}>RG *</label><input style={inp} value={form.rg} onChange={e => set("rg",e.target.value)} placeholder="00.000.000-0"/></div>
           <div><label style={lbl}>Estado Civil</label><select style={sel} value={form.estado_civil} onChange={e => set("estado_civil",e.target.value)}><option value="">Selecione</option>{["Solteiro(a)","Casado(a)","Divorciado(a)","Viúvo(a)","União estável"].map(o=><option key={o}>{o}</option>)}</select></div>
           <div><label style={lbl}>Escolaridade</label><select style={sel} value={form.escolaridade} onChange={e => set("escolaridade",e.target.value)}><option value="">Selecione</option>{["Ensino Fundamental","Ensino Médio","Ensino Superior Incompleto","Ensino Superior Completo","Pós-graduação","Mestrado","Doutorado"].map(o=><option key={o}>{o}</option>)}</select></div>
+          {form.escolaridade === "Ensino Superior Incompleto" && (<>
+            <div><label style={lbl}>Curso</label><input style={inp} value={form.curso_superior} onChange={e => set("curso_superior",e.target.value)} placeholder="Ex: Administração, Direito, TI..."/></div>
+            <div><label style={lbl}>Semestre atual</label><input style={inp} value={form.curso_semestre} onChange={e => set("curso_semestre",e.target.value)} placeholder="Ex: 3º semestre"/></div>
+            <div style={{ gridColumn: "1/-1" }}><label style={lbl}>Modalidade</label><select style={sel} value={form.curso_modalidade} onChange={e => set("curso_modalidade",e.target.value)}><option value="">Selecione</option><option>Presencial</option><option>Online</option><option>Híbrido</option></select></div>
+          </>)}
           <div><label style={lbl}>Nome da Mãe</label><input style={inp} value={form.nome_mae} onChange={e => set("nome_mae",e.target.value)} placeholder="Nome completo"/></div>
           <div><label style={lbl}>Nome do Pai</label><input style={inp} value={form.nome_pai} onChange={e => set("nome_pai",e.target.value)} placeholder="Nome completo (ou N/A)"/></div>
           <div><label style={lbl}>Chave PIX</label><input style={inp} value={form.pix} onChange={e => set("pix",e.target.value)} placeholder="CPF, e-mail ou telefone"/></div>
@@ -3652,6 +3670,13 @@ function FormularioCandidato({ token }) {
             <div><label style={lbl}>Validade do Visto (opcional)</label><input type="date" style={inp} value={form.visto_validade} onChange={e => set("visto_validade",e.target.value)}/></div>
           </div>
         )}
+
+        {/* Condução */}
+        <div style={sec}>🚌 Vale Condução</div>
+        <div style={grid2}>
+          <div><label style={lbl}>Valor diário (ida + volta)</label><input style={inp} value={form.conducao_valor} onChange={e => set("conducao_valor",e.target.value)} placeholder="Ex: R$ 10,40"/></div>
+          <div><label style={lbl}>Tem integração de ônibus?</label><select style={sel} value={form.conducao_integracao} onChange={e => set("conducao_integracao",e.target.value)}><option value="">Selecione</option><option>Sim</option><option>Não</option><option>Parcial</option></select></div>
+        </div>
 
         {/* Dependentes */}
         <div style={sec}>👨‍👩‍👦 Dependentes</div>
