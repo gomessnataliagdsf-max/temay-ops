@@ -3405,13 +3405,21 @@ function FormularioCandidato({ token }) {
 
   React.useEffect(() => {
     const load = async () => {
-      const r = await fetch(`${SB_URL}/rest/v1/contratacoes?token_formulario=eq.${token}&select=*,candidatos(nome,email,telefone,vaga)`, {
+      const r = await fetch(`${SB_URL}/rest/v1/contratacoes?token_formulario=eq.${token}&select=*`, {
         headers: { "apikey": SB_KEY, "Authorization": `Bearer ${SB_KEY}` }
       });
       const data = await r.json();
+      console.log("Formulário - dados retornados:", data);
       if (!Array.isArray(data) || !data[0]) { setEstado("invalido"); return; }
       const c = data[0];
       if (c.token_expira && new Date(c.token_expira) < new Date()) { setEstado("invalido"); return; }
+      // Busca dados do candidato separadamente
+      if (c.candidato_id) {
+        const rc = await fetch(`${SB_URL}/rest/v1/candidatos?id=eq.${c.candidato_id}&select=nome,email,telefone,vaga`, {
+          headers: { "apikey": SB_KEY, "Authorization": `Bearer ${SB_KEY}` }
+        }).then(r => r.json()).catch(() => []);
+        c.candidatos = Array.isArray(rc) && rc[0] ? rc[0] : {};
+      }
       setContratacao(c);
       // Pre-fill if already has data
       if (c.cpf) setForm(f => ({ ...f,
