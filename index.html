@@ -2126,18 +2126,37 @@ function GerarLinkFormulario({ candidato, empresaId, contratacaoId }) {
   const gerarLink = async () => {
     setGerando(true);
     const token = btoa(`${candidato.id}__${empresaId}__${Date.now()}`).replace(/=/g,"");
-    await fetch(`${SB_URL}/rest/v1/contratacoes?candidato_id=eq.${candidato.id}`, {
-      method: "PATCH",
-      headers: { "apikey": SB_KEY, "Authorization": `Bearer ${SB_KEY}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ token_formulario: token, token_expira: new Date(Date.now() + 7*24*60*60*1000).toISOString() })
-    });
-    // Se ainda não tem contratação criada, cria uma com o token
-    if (!contratacaoId) {
-      await fetch(`${SB_URL}/rest/v1/contratacoes`, {
-        method: "POST",
-        headers: { "apikey": SB_KEY, "Authorization": `Bearer ${SB_KEY}`, "Content-Type": "application/json", "Prefer": "return=minimal" },
-        body: JSON.stringify({ candidato_id: candidato.id, empresa_id: empresaId, token_formulario: token, token_expira: new Date(Date.now() + 7*24*60*60*1000).toISOString() })
+    const expira = new Date(Date.now() + 7*24*60*60*1000).toISOString();
+    const payload = { candidato_id: candidato.id, empresa_id: empresaId, token_formulario: token, token_expira: expira };
+
+    if (contratacaoId) {
+      // Já existe — só atualiza o token
+      await fetch(`${SB_URL}/rest/v1/contratacoes?id=eq.${contratacaoId}`, {
+        method: "PATCH",
+        headers: { "apikey": SB_KEY, "Authorization": `Bearer ${SB_KEY}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ token_formulario: token, token_expira: expira })
       });
+    } else {
+      // Verifica se já existe registro para esse candidato
+      const check = await fetch(`${SB_URL}/rest/v1/contratacoes?candidato_id=eq.${candidato.id}&empresa_id=eq.${empresaId}&select=id`, {
+        headers: { "apikey": SB_KEY, "Authorization": `Bearer ${SB_KEY}` }
+      }).then(r => r.json()).catch(() => []);
+
+      if (Array.isArray(check) && check[0]) {
+        // Existe — atualiza
+        await fetch(`${SB_URL}/rest/v1/contratacoes?id=eq.${check[0].id}`, {
+          method: "PATCH",
+          headers: { "apikey": SB_KEY, "Authorization": `Bearer ${SB_KEY}`, "Content-Type": "application/json" },
+          body: JSON.stringify({ token_formulario: token, token_expira: expira })
+        });
+      } else {
+        // Não existe — cria
+        await fetch(`${SB_URL}/rest/v1/contratacoes`, {
+          method: "POST",
+          headers: { "apikey": SB_KEY, "Authorization": `Bearer ${SB_KEY}`, "Content-Type": "application/json", "Prefer": "return=minimal" },
+          body: JSON.stringify(payload)
+        });
+      }
     }
     const url = `${window.location.origin}${window.location.pathname}?formulario=${token}`;
     setLink(url);
