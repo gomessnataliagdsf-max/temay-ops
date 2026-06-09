@@ -3505,10 +3505,15 @@ function FormularioCandidato({ token }) {
       headers: { "apikey": SB_KEY, "Authorization": `Bearer ${SB_KEY}`, "Content-Type": "application/json" },
       body: JSON.stringify({ ...formSanitizado, foto_url, documentos, formulario_preenchido: true, updated_at: new Date().toISOString() })
     });
-    const resJson = await resEnvio.json();
+    const resText = await resEnvio.text();
+    const resJson = resText ? JSON.parse(resText) : {};
     console.log("PATCH resultado:", resEnvio.status, JSON.stringify(resJson));
     setSalvando(false);
-    setEstado("enviado");
+    if (resEnvio.ok) {
+      setEstado("enviado");
+    } else {
+      alert("Erro ao enviar: " + (resJson.message || resEnvio.status));
+    }
   };
 
   const candidato = contratacao?.candidatos || {};
