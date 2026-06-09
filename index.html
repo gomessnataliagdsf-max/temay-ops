@@ -1290,6 +1290,8 @@ function FormCandidato({ candidato, vagas, candidatos, origens, onSalvar, onFech
     link_meet: candidato.link_meet || "", observacoes: candidato.observacoes || ""
   } : INIT);
   const [erros, setErros] = React.useState({});
+  const [curriculo, setCurriculo] = React.useState(candidato?.curriculo_url ? { url: candidato.curriculo_url, nome: candidato.curriculo_nome || "Currículo" } : null);
+  const [uploadingCurriculo, setUploadingCurriculo] = React.useState(false);
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
   const nomesOrigens = origens.map(o => o.nome || o);
 
@@ -1303,6 +1305,29 @@ function FormCandidato({ candidato, vagas, candidatos, origens, onSalvar, onFech
       if (dup) e.telefone = `Telefone já cadastrado para ${dup.nome}`;
     }
     setErros(e); return Object.keys(e).length === 0;
+  };
+
+  const handleCurriculo = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const allowed = ["application/pdf","application/msword","application/vnd.openxmlformats-officedocument.wordprocessingml.document","image/jpeg","image/png","image/webp"];
+    if (!allowed.includes(file.type)) { alert("Formato não permitido. Use PDF, Word ou imagem."); return; }
+    setUploadingCurriculo(true);
+    try {
+      const path = `curriculos/${Date.now()}_${file.name}`;
+      const up = await fetch(`${SB_URL}/storage/v1/object/documentos-contratacao/${path}`, {
+        method: "POST",
+        headers: { "apikey": SB_KEY, "Authorization": \`Bearer \${SB_KEY}\`, "Content-Type": file.type, "x-upsert": "true" },
+        body: file
+      });
+      if (up.ok) {
+        const url = \`\${SB_URL}/storage/v1/object/public/documentos-contratacao/\${path}\`;
+        setCurriculo({ url, nome: file.name });
+      } else {
+        alert("Erro ao fazer upload do currículo.");
+      }
+    } catch(err) { alert("Erro ao fazer upload do currículo."); }
+    setUploadingCurriculo(false);
   };
 
   return (
@@ -1344,7 +1369,24 @@ function FormCandidato({ candidato, vagas, candidatos, origens, onSalvar, onFech
         </div>
         <div className="modal-section">Observações</div>
         <div className="form-group"><textarea className="form-textarea" value={form.observacoes} onChange={e => set("observacoes", e.target.value)} placeholder="Feedback, anotações..."/></div>
-        <div className="modal-actions"><button className="btn btn-ghost" onClick={onFechar}>Cancelar</button><button className="btn btn-primary" onClick={() => { if (validar()) onSalvar(form); }}>{candidato ? "Salvar" : "Cadastrar"}</button></div>
+        <div className="modal-section">Currículo</div>
+        <div className="form-group">
+          {curriculo ? (
+            <div style={{ display:"flex", alignItems:"center", gap:10, padding:"10px 14px", background:"var(--bg3)", borderRadius:8, border:"1px solid var(--border)" }}>
+              <span style={{ fontSize:20 }}>📄</span>
+              <a href={curriculo.url} target="_blank" rel="noopener noreferrer" style={{ flex:1, color:"var(--accent)", fontSize:13, wordBreak:"break-all" }}>{curriculo.nome}</a>
+              <button onClick={() => setCurriculo(null)} style={{ background:"none", border:"none", color:"var(--text2)", cursor:"pointer", fontSize:16, padding:"0 4px" }} title="Remover">×</button>
+            </div>
+          ) : (
+            <label style={{ display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", gap:8, padding:"18px", border:"2px dashed var(--border)", borderRadius:8, cursor:"pointer", color:"var(--text2)", fontSize:13 }}>
+              <span style={{ fontSize:28 }}>{uploadingCurriculo ? "⏳" : "📎"}</span>
+              <span>{uploadingCurriculo ? "Enviando..." : "Clique para anexar o currículo"}</span>
+              <span style={{ fontSize:11 }}>PDF, Word ou imagem</span>
+              <input type="file" accept=".pdf,.doc,.docx,.jpg,.jpeg,.png,.webp" onChange={handleCurriculo} style={{ display:"none" }} disabled={uploadingCurriculo}/>
+            </label>
+          )}
+        </div>
+        <div className="modal-actions"><button className="btn btn-ghost" onClick={onFechar}>Cancelar</button><button className="btn btn-primary" onClick={() => { if (validar()) onSalvar(form, curriculo); }}>{candidato ? "Salvar" : "Cadastrar"}</button></div>
       </div>
     </div>
   );
@@ -1380,8 +1422,11 @@ function CandidatosEmp({ data, setData, user, empresaId, origens, podeVerTudo })
   const temF = busca || fTel || fStatus !== "Todos" || fOrigem !== "Todas" || fVaga !== "Todas" || fRec !== "Todos";
   const limpar = () => { setBusca(""); setFTel(""); setFStatus("Todos"); setFOrigem("Todas"); setFVaga("Todas"); setFRec("Todos"); };
 
-  const salvar = async (form, motivo_desistencia_extra) => {
-    const item = { nome: form.nome || "", email: form.email || "", vaga: form.vaga || "", telefone: form.telefone || "", status: form.status || "Novo", perfil: form.perfil || "", recrutador: form.recrutador || "", origem_contato: form.origem_contato || "", tipo_entrevista: form.tipo_entrevista || "", data_entrevista: form.data_entrevista || null, horario_entrevista: form.horario_entrevista || "", link_meet: form.link_meet || "", observacoes: form.observacoes || "", data: form.data || null, empresa_id: empresaId, motivo_desistencia: motivo_desistencia_extra || form.motivo_desistencia || "" };
+  const salvar = async (form, curriculoOuMotivo, motivo_desistencia_extra) => {
+    // curriculoOuMotivo pode ser objeto {url, nome} vindo do FormCandidato, ou string de motivo
+    const curriculoObj = (curriculoOuMotivo && typeof curriculoOuMotivo === "object") ? curriculoOuMotivo : null;
+    const motivoExtra = (typeof curriculoOuMotivo === "string") ? curriculoOuMotivo : motivo_desistencia_extra;
+    const item = { nome: form.nome || "", email: form.email || "", vaga: form.vaga || "", telefone: form.telefone || "", status: form.status || "Novo", perfil: form.perfil || "", recrutador: form.recrutador || "", origem_contato: form.origem_contato || "", tipo_entrevista: form.tipo_entrevista || "", data_entrevista: form.data_entrevista || null, horario_entrevista: form.horario_entrevista || "", link_meet: form.link_meet || "", observacoes: form.observacoes || "", data: form.data || null, empresa_id: empresaId, motivo_desistencia: motivoExtra || form.motivo_desistencia || "", ...(curriculoObj ? { curriculo_url: curriculoObj.url, curriculo_nome: curriculoObj.nome } : {}) };
     if (editando) {
       await db.patch("candidatos", editando, item);
       setData(d => ({ ...d, candidatos: d.candidatos.map(c => c.id === editando ? { ...c, ...item } : c) }));
