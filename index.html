@@ -3497,10 +3497,13 @@ function FormularioCandidato({ token }) {
       });
       if (up.ok) foto_url = `${SB_URL}/storage/v1/object/public/${SB_BUCKET}/${path}`;
     }
+    const DATE_FIELDS = ["data_nascimento","data_inicio","visto_validade"];
+    const formSanitizado = { ...form };
+    DATE_FIELDS.forEach(f => { if (!formSanitizado[f]) formSanitizado[f] = null; });
     const resEnvio = await fetch(`${SB_URL}/rest/v1/contratacoes?id=eq.${contratacao.id}`, {
       method: "PATCH",
       headers: { "apikey": SB_KEY, "Authorization": `Bearer ${SB_KEY}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ ...form, foto_url, documentos, formulario_preenchido: true, updated_at: new Date().toISOString() })
+      body: JSON.stringify({ ...formSanitizado, foto_url, documentos, formulario_preenchido: true, updated_at: new Date().toISOString() })
     });
     const resJson = await resEnvio.json();
     console.log("PATCH resultado:", resEnvio.status, JSON.stringify(resJson));
