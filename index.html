@@ -1317,11 +1317,11 @@ function FormCandidato({ candidato, vagas, candidatos, origens, onSalvar, onFech
       const path = `curriculos/${Date.now()}_${file.name}`;
       const up = await fetch(`${SB_URL}/storage/v1/object/documentos-contratacao/${path}`, {
         method: "POST",
-        headers: { "apikey": SB_KEY, "Authorization": \`Bearer \${SB_KEY}\`, "Content-Type": file.type, "x-upsert": "true" },
+        headers: { "apikey": SB_KEY, "Authorization": `Bearer ${SB_KEY}`, "Content-Type": file.type, "x-upsert": "true" },
         body: file
       });
       if (up.ok) {
-        const url = \`\${SB_URL}/storage/v1/object/public/documentos-contratacao/\${path}\`;
+        const url = `${SB_URL}/storage/v1/object/public/documentos-contratacao/${path}`;
         setCurriculo({ url, nome: file.name });
       } else {
         alert("Erro ao fazer upload do currículo.");
