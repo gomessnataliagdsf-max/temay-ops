@@ -1432,6 +1432,17 @@ function CandidatosEmp({ data, setData, user, empresaId, origens, podeVerTudo })
       await db.patch("candidatos", editando, item);
       setData(d => ({ ...d, candidatos: d.candidatos.map(c => c.id === editando ? { ...c, ...item } : c) }));
     } else {
+      if (item.telefone) {
+        const telLimpo = limTel(item.telefone);
+        const existentes = await fetch(`${SB_URL}/rest/v1/candidatos?empresa_id=eq.${empresaId}&select=id,nome,telefone`, {
+          headers: { "apikey": SB_KEY, "Authorization": `Bearer ${SB_KEY}` }
+        }).then(r => r.json()).catch(() => []);
+        const dupServer = Array.isArray(existentes) ? existentes.find(c => limTel(c.telefone || "") === telLimpo && telLimpo.length > 0) : null;
+        if (dupServer) {
+          alert(`Já existe um candidato cadastrado com esse telefone: ${dupServer.nome}`);
+          return;
+        }
+      }
       const r = await db.post("candidatos", item);
       const novo = (Array.isArray(r) && r[0]) ? r[0] : { ...item, id: Date.now().toString() };
       setData(d => ({ ...d, candidatos: [novo, ...d.candidatos] }));
