@@ -319,13 +319,21 @@ const contratacoesService = {
     const payload = {
       ...form,
       remuneracao: num(form.remuneracao),
+      conducao_valor_ida: num(form.conducao_valor_ida),
+      conducao_valor_volta: num(form.conducao_valor_volta),
+      conducao_valor: (num(form.conducao_valor_ida) !== null || num(form.conducao_valor_volta) !== null)
+        ? (parseFloat(form.conducao_valor_ida || 0) + parseFloat(form.conducao_valor_volta || 0))
+        : null,
       vt_valor: num(form.vt_valor),
       vr_valor: num(form.vr_valor),
       wellhub_valor: num(form.wellhub_valor),
       convenio_titular: num(form.convenio_titular),
-      convenio_dependentes: num(form.convenio_dependentes),
+      convenio_percentual_empresa: num(form.convenio_percentual_empresa),
+      convenio_valor_empresa: parseFloat(form.convenio_titular||0) * (parseFloat(form.convenio_percentual_empresa||0)/100),
+      convenio_valor_colaborador: parseFloat(form.convenio_titular||0) * (1 - parseFloat(form.convenio_percentual_empresa||0)/100),
+      convenio_dependentes: (form.dependentes||[]).reduce((s,d)=>s+parseFloat(d.valor_convenio||0),0),
       coparticipacao_titular: num(form.coparticipacao_titular),
-      coparticipacao_dependentes: num(form.coparticipacao_dependentes),
+      coparticipacao_dependentes: (form.dependentes||[]).reduce((s,d)=>s+parseFloat(d.valor_coparticipacao||0),0),
       data_nascimento: form.data_nascimento || null,
       data_inicio: form.data_inicio || null,
       documentos: documentos,
@@ -2159,7 +2167,7 @@ function CampoContratacao({ label, name, type, placeholder, span2, form, onChang
 // ============================================================
 function SecaoDependentes({ form, setForm }) {
   const deps = form.dependentes || [];
-  const addDep = () => setForm(f => ({ ...f, dependentes: [...(f.dependentes||[]), { id: Date.now(), nome: "", parentesco: "", cpf: "", data_nascimento: "" }] }));
+  const addDep = () => setForm(f => ({ ...f, dependentes: [...(f.dependentes||[]), { id: Date.now(), nome: "", parentesco: "", cpf: "", data_nascimento: "", valor_convenio: "", valor_coparticipacao: "" }] }));
   const updDep = (id, field, val) => setForm(f => ({ ...f, dependentes: (f.dependentes||[]).map(d => d.id === id ? { ...d, [field]: val } : d) }));
   const remDep = (id) => setForm(f => ({ ...f, dependentes: (f.dependentes||[]).filter(d => d.id !== id) }));
   const base = { background: "var(--bg3)", border: "1px solid var(--border)", borderRadius: "var(--radius-sm)", color: "var(--text)", fontSize: 12, padding: "7px 9px", width: "100%", outline: "none" };
@@ -2180,9 +2188,17 @@ function SecaoDependentes({ form, setForm }) {
           <div><label className="form-label">Parentesco</label><select style={base} value={d.parentesco} onChange={e => updDep(d.id,"parentesco",e.target.value)}><option value="">Selecione</option>{["Filho(a)","Cônjuge","Companheiro(a)","Pai","Mãe","Enteado(a)","Tutelado(a)"].map(o=><option key={o}>{o}</option>)}</select></div>
           <div><label className="form-label">CPF</label><input style={base} value={d.cpf} onChange={e => updDep(d.id,"cpf",e.target.value)} placeholder="000.000.000-00"/></div>
           <div><label className="form-label">Data de Nascimento</label><input type="date" style={base} value={d.data_nascimento} onChange={e => updDep(d.id,"data_nascimento",e.target.value)}/></div>
+          <div><label className="form-label">Convênio — Mensalidade (R$)</label><input type="number" style={base} value={d.valor_convenio||""} onChange={e => updDep(d.id,"valor_convenio",e.target.value)} placeholder="0.00"/></div>
+          <div><label className="form-label">Coparticipação (R$)</label><input type="number" style={base} value={d.valor_coparticipacao||""} onChange={e => updDep(d.id,"valor_coparticipacao",e.target.value)} placeholder="0.00"/></div>
         </div>
       </div>
     ))}
+    {deps.length > 0 && (
+      <div style={{ display: "flex", gap: 16, fontSize: 12, color: "var(--text2)", marginBottom: 12, padding: "0 2px" }}>
+        <span>Total Convênio Dependentes: <strong style={{ color: "var(--green)" }}>R$ {deps.reduce((s,d)=>s+parseFloat(d.valor_convenio||0),0).toFixed(2)}</strong></span>
+        <span>Total Coparticipação Dependentes: <strong style={{ color: "var(--green)" }}>R$ {deps.reduce((s,d)=>s+parseFloat(d.valor_coparticipacao||0),0).toFixed(2)}</strong></span>
+      </div>
+    )}
   </>);
 }
 
@@ -2299,10 +2315,12 @@ function ContratacaoModal({ candidato, empresaId, onFechar }) {
     passaporte: "", pais_origem: "", rne: "", visto_tipo: "", visto_validade: "",
     // Contratuais
     data_inicio: "", remuneracao: "", beneficios: "", unidade: "", equipe: "",
+    conducao_valor_ida: "", conducao_valor_volta: "", conducao_integracao: "",
     // Benefícios detalhados
     vt_valor: "", vr_valor: "",
     wellhub_tipo: "", wellhub_valor: "",
     convenio_titular: "", convenio_dependentes: "",
+    convenio_percentual_empresa: "50",
     coparticipacao_titular: "", coparticipacao_dependentes: "",
     // Dependentes
     dependentes: [],
@@ -2377,12 +2395,15 @@ function ContratacaoModal({ candidato, empresaId, onFechar }) {
           unidade: existente.unidade || "",
           equipe: existente.equipe || "",
           conducao_valor: existente.conducao_valor || "",
+          conducao_valor_ida: existente.conducao_valor_ida || "",
+          conducao_valor_volta: existente.conducao_valor_volta || "",
           conducao_integracao: existente.conducao_integracao || "",
           vt_valor: existente.vt_valor || "",
           vr_valor: existente.vr_valor || "",
           wellhub_tipo: existente.wellhub_tipo || "",
           wellhub_valor: existente.wellhub_valor || "",
           convenio_titular: existente.convenio_titular || "",
+          convenio_percentual_empresa: (existente.convenio_percentual_empresa !== null && existente.convenio_percentual_empresa !== undefined) ? String(existente.convenio_percentual_empresa) : "50",
           convenio_dependentes: existente.convenio_dependentes || "",
           coparticipacao_titular: existente.coparticipacao_titular || "",
           coparticipacao_dependentes: existente.coparticipacao_dependentes || "",
@@ -2613,7 +2634,8 @@ function ContratacaoModal({ candidato, empresaId, onFechar }) {
                 <CampoContratacao form={form} onChange={handleChange} label="Remuneração (R$)" name="remuneracao" type="number" placeholder="0.00"/>
                 <CampoContratacao form={form} onChange={handleChange} label="Unidade" name="unidade" placeholder="Nome da unidade"/>
                 <CampoContratacao form={form} onChange={handleChange} label="Equipe" name="equipe" placeholder="Nome da equipe"/>
-                <CampoContratacao form={form} onChange={handleChange} label="Vale Condução (R$ ida+volta)" name="conducao_valor" placeholder="Ex: 10,40"/>
+                <CampoContratacao form={form} onChange={handleChange} label="Vale Condução — Ida (R$)" name="conducao_valor_ida" type="number" placeholder="Ex: 13,05"/>
+                <CampoContratacao form={form} onChange={handleChange} label="Vale Condução — Volta (R$)" name="conducao_valor_volta" type="number" placeholder="Ex: 13,05"/>
                 <CampoContratacao form={form} onChange={handleChange} label="Integração de ônibus?" name="conducao_integracao" type="select" options={["Sim","Não","Parcial"]}/>
               </div>
 
@@ -2625,9 +2647,20 @@ function ContratacaoModal({ candidato, empresaId, onFechar }) {
                 <CampoContratacao form={form} onChange={handleChange} label="Wellhub / TotalPass" name="wellhub_tipo" type="select" options={["Wellhub","TotalPass","Não possui"]}/>
                 <CampoContratacao form={form} onChange={handleChange} label="Valor Wellhub/TotalPass (R$)" name="wellhub_valor" type="number" placeholder="0.00"/>
                 <CampoContratacao form={form} onChange={handleChange} label="Convênio — Mensalidade Titular (R$)" name="convenio_titular" type="number" placeholder="0.00"/>
-                <CampoContratacao form={form} onChange={handleChange} label="Convênio — Mensalidade Dependentes (R$)" name="convenio_dependentes" type="number" placeholder="0.00"/>
+                <CampoContratacao form={form} onChange={handleChange} label="% Pago pela Empresa (Titular)" name="convenio_percentual_empresa" type="number" placeholder="Ex: 50 (padrão) ou 100 (supervisores)"/>
+                <div className="form-group" style={{ gridColumn: "1/-1", display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, padding: 12, background: "var(--bg3)", border: "1px solid var(--border)", borderRadius: "var(--radius-sm)" }}>
+                  <div><span style={{ fontSize: 11, color: "var(--text3)" }}>Empresa paga</span><div style={{ fontSize: 15, fontWeight: 700, color: "var(--green)" }}>R$ {(parseFloat(form.convenio_titular||0) * (parseFloat(form.convenio_percentual_empresa||0)/100)).toFixed(2)}</div></div>
+                  <div><span style={{ fontSize: 11, color: "var(--text3)" }}>Desconto do colaborador</span><div style={{ fontSize: 15, fontWeight: 700, color: "#f0a020" }}>R$ {(parseFloat(form.convenio_titular||0) * (1 - parseFloat(form.convenio_percentual_empresa||0)/100)).toFixed(2)}</div></div>
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Convênio — Mensalidade Dependentes (R$)</label>
+                  <input className="form-input" disabled value={`R$ ${(form.dependentes||[]).reduce((s,d)=>s+parseFloat(d.valor_convenio||0),0).toFixed(2)} (calculado abaixo)`}/>
+                </div>
                 <CampoContratacao form={form} onChange={handleChange} label="Coparticipação — Titular (R$)" name="coparticipacao_titular" type="number" placeholder="0.00"/>
-                <CampoContratacao form={form} onChange={handleChange} label="Coparticipação — Dependentes (R$)" name="coparticipacao_dependentes" type="number" placeholder="0.00"/>
+                <div className="form-group">
+                  <label className="form-label">Coparticipação — Dependentes (R$)</label>
+                  <input className="form-input" disabled value={`R$ ${(form.dependentes||[]).reduce((s,d)=>s+parseFloat(d.valor_coparticipacao||0),0).toFixed(2)} (calculado abaixo)`}/>
+                </div>
                 <CampoContratacao form={form} onChange={handleChange} label="Outros benefícios / observações" name="beneficios" type="textarea" placeholder="Outros benefícios não listados acima..." span2/>
               </div>
 
@@ -3506,7 +3539,7 @@ function FormularioCandidato({ token }) {
     banco_pj: "", agencia_pj: "", conta_pj: "",
     is_estrangeiro: false, passaporte: "", pais_origem: "", rne: "", visto_tipo: "", visto_validade: "",
     nome_responsavel: "", grau_parentesco: "", rg_responsavel: "", cpf_responsavel: "", email_responsavel: "",
-    conducao_valor: "", conducao_integracao: "",
+    conducao_valor: "", conducao_valor_ida: "", conducao_valor_volta: "", conducao_integracao: "",
     dependentes: [],
   });
   const [foto, setFoto] = React.useState(null);
@@ -3601,6 +3634,9 @@ function FormularioCandidato({ token }) {
     const DATE_FIELDS = ["data_nascimento","data_inicio","visto_validade"];
     const formSanitizado = { ...form };
     DATE_FIELDS.forEach(f => { if (!formSanitizado[f]) formSanitizado[f] = null; });
+    if (formSanitizado.conducao_valor_ida || formSanitizado.conducao_valor_volta) {
+      formSanitizado.conducao_valor = parseFloat(formSanitizado.conducao_valor_ida || 0) + parseFloat(formSanitizado.conducao_valor_volta || 0);
+    }
     const resEnvio = await fetch(`${SB_URL}/rest/v1/contratacoes?id=eq.${contratacao.id}`, {
       method: "PATCH",
       headers: { "apikey": SB_KEY, "Authorization": `Bearer ${SB_KEY}`, "Content-Type": "application/json" },
@@ -3786,7 +3822,8 @@ function FormularioCandidato({ token }) {
         {/* Condução */}
         <div style={sec}>🚌 Vale Condução</div>
         <div style={grid2}>
-          <div><label style={lbl}>Valor diário (ida + volta)</label><input style={inp} value={form.conducao_valor} onChange={e => set("conducao_valor",e.target.value)} placeholder="Ex: R$ 10,40"/></div>
+          <div><label style={lbl}>Vale Condução — Ida (R$)</label><input style={inp} value={form.conducao_valor_ida} onChange={e => set("conducao_valor_ida",e.target.value)} placeholder="Ex: 13,05"/></div>
+          <div><label style={lbl}>Vale Condução — Volta (R$)</label><input style={inp} value={form.conducao_valor_volta} onChange={e => set("conducao_valor_volta",e.target.value)} placeholder="Ex: 13,05"/></div>
           <div><label style={lbl}>Tem integração de ônibus?</label><select style={sel} value={form.conducao_integracao} onChange={e => set("conducao_integracao",e.target.value)}><option value="">Selecione</option><option>Sim</option><option>Não</option><option>Parcial</option></select></div>
         </div>
 
