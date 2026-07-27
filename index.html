@@ -330,7 +330,10 @@ const contratacoesService = {
       convenio_titular: num(form.convenio_titular),
       convenio_percentual_empresa: num(form.convenio_percentual_empresa),
       convenio_valor_empresa: parseFloat(form.convenio_titular||0) * (parseFloat(form.convenio_percentual_empresa||0)/100),
-      convenio_valor_colaborador: parseFloat(form.convenio_titular||0) * (1 - parseFloat(form.convenio_percentual_empresa||0)/100),
+      convenio_valor_colaborador: (parseFloat(form.convenio_titular||0) * (1 - parseFloat(form.convenio_percentual_empresa||0)/100))
+        + (form.dependentes||[]).reduce((s,d)=>s+parseFloat(d.valor_convenio||0),0)
+        + parseFloat(form.coparticipacao_titular||0)
+        + (form.dependentes||[]).reduce((s,d)=>s+parseFloat(d.valor_coparticipacao||0),0),
       convenio_dependentes: (form.dependentes||[]).reduce((s,d)=>s+parseFloat(d.valor_convenio||0),0),
       coparticipacao_titular: num(form.coparticipacao_titular),
       coparticipacao_dependentes: (form.dependentes||[]).reduce((s,d)=>s+parseFloat(d.valor_coparticipacao||0),0),
@@ -2648,19 +2651,35 @@ function ContratacaoModal({ candidato, empresaId, onFechar }) {
                 <CampoContratacao form={form} onChange={handleChange} label="Valor Wellhub/TotalPass (R$)" name="wellhub_valor" type="number" placeholder="0.00"/>
                 <CampoContratacao form={form} onChange={handleChange} label="Convênio — Mensalidade Titular (R$)" name="convenio_titular" type="number" placeholder="0.00"/>
                 <CampoContratacao form={form} onChange={handleChange} label="% Pago pela Empresa (Titular)" name="convenio_percentual_empresa" type="number" placeholder="Ex: 50 (padrão) ou 100 (supervisores)"/>
-                <div className="form-group" style={{ gridColumn: "1/-1", display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, padding: 12, background: "var(--bg3)", border: "1px solid var(--border)", borderRadius: "var(--radius-sm)" }}>
-                  <div><span style={{ fontSize: 11, color: "var(--text3)" }}>Empresa paga</span><div style={{ fontSize: 15, fontWeight: 700, color: "var(--green)" }}>R$ {(parseFloat(form.convenio_titular||0) * (parseFloat(form.convenio_percentual_empresa||0)/100)).toFixed(2)}</div></div>
-                  <div><span style={{ fontSize: 11, color: "var(--text3)" }}>Desconto do colaborador</span><div style={{ fontSize: 15, fontWeight: 700, color: "#f0a020" }}>R$ {(parseFloat(form.convenio_titular||0) * (1 - parseFloat(form.convenio_percentual_empresa||0)/100)).toFixed(2)}</div></div>
-                </div>
                 <div className="form-group">
                   <label className="form-label">Convênio — Mensalidade Dependentes (R$)</label>
-                  <input className="form-input" disabled value={`R$ ${(form.dependentes||[]).reduce((s,d)=>s+parseFloat(d.valor_convenio||0),0).toFixed(2)} (calculado abaixo)`}/>
+                  <input className="form-input" disabled value={`R$ ${(form.dependentes||[]).reduce((s,d)=>s+parseFloat(d.valor_convenio||0),0).toFixed(2)} (calculado na seção Dependentes)`}/>
                 </div>
                 <CampoContratacao form={form} onChange={handleChange} label="Coparticipação — Titular (R$)" name="coparticipacao_titular" type="number" placeholder="0.00"/>
                 <div className="form-group">
                   <label className="form-label">Coparticipação — Dependentes (R$)</label>
-                  <input className="form-input" disabled value={`R$ ${(form.dependentes||[]).reduce((s,d)=>s+parseFloat(d.valor_coparticipacao||0),0).toFixed(2)} (calculado abaixo)`}/>
+                  <input className="form-input" disabled value={`R$ ${(form.dependentes||[]).reduce((s,d)=>s+parseFloat(d.valor_coparticipacao||0),0).toFixed(2)} (calculado na seção Dependentes)`}/>
                 </div>
+                {(() => {
+                  const mensalidadeTitular = parseFloat(form.convenio_titular||0);
+                  const mensalidadeDeps = (form.dependentes||[]).reduce((s,d)=>s+parseFloat(d.valor_convenio||0),0);
+                  const copartTitular = parseFloat(form.coparticipacao_titular||0);
+                  const copartDeps = (form.dependentes||[]).reduce((s,d)=>s+parseFloat(d.valor_coparticipacao||0),0);
+                  const pct = parseFloat(form.convenio_percentual_empresa||0)/100;
+                  const totalMensalidade = mensalidadeTitular + mensalidadeDeps;
+                  const totalCopart = copartTitular + copartDeps;
+                  const empresaPaga = mensalidadeTitular * pct; // empresa só subsidia mensalidade do titular
+                  const colaboradorPaga = (mensalidadeTitular * (1 - pct)) + mensalidadeDeps + totalCopart;
+                  return (
+                    <div className="form-group" style={{ gridColumn: "1/-1", display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, padding: 12, background: "var(--bg3)", border: "1px solid var(--border)", borderRadius: "var(--radius-sm)" }}>
+                      <div style={{ gridColumn: "1/-1", fontSize: 12, color: "var(--text3)", borderBottom: "1px solid var(--border)", paddingBottom: 6, marginBottom: 4 }}>
+                        Total Mensalidade (Titular + Dependentes): <strong>R$ {totalMensalidade.toFixed(2)}</strong> &nbsp;|&nbsp; Total Coparticipação (Titular + Dependentes): <strong>R$ {totalCopart.toFixed(2)}</strong>
+                      </div>
+                      <div><span style={{ fontSize: 11, color: "var(--text3)" }}>Empresa paga (só mensalidade titular)</span><div style={{ fontSize: 15, fontWeight: 700, color: "var(--green)" }}>R$ {empresaPaga.toFixed(2)}</div></div>
+                      <div><span style={{ fontSize: 11, color: "var(--text3)" }}>Total desconto do colaborador</span><div style={{ fontSize: 15, fontWeight: 700, color: "#f0a020" }}>R$ {colaboradorPaga.toFixed(2)}</div></div>
+                    </div>
+                  );
+                })()}
                 <CampoContratacao form={form} onChange={handleChange} label="Outros benefícios / observações" name="beneficios" type="textarea" placeholder="Outros benefícios não listados acima..." span2/>
               </div>
 
