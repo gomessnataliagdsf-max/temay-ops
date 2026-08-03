@@ -314,6 +314,18 @@ const contratacoesService = {
       return null;
     }
   },
+  listarPorEmpresa: async (empresaId) => {
+    try {
+      const r = await fetch(`${SB_URL}/rest/v1/contratacoes?empresa_id=eq.${empresaId}&select=*`, {
+        headers: { "apikey": SB_KEY, "Authorization": `Bearer ${SB_KEY}` }
+      });
+      const data = await r.json();
+      return Array.isArray(data) ? data : [];
+    } catch (e) {
+      console.error("[contratacoes.listarPorEmpresa]", e);
+      return [];
+    }
+  },
   salvar: async (candidatoId, empresaId, form, documentos, contratacaoId) => {
     const num = (v) => (v !== "" && v !== null && v !== undefined && !isNaN(v)) ? parseFloat(v) : null;
     const payload = {
@@ -339,6 +351,11 @@ const contratacoesService = {
       coparticipacao_dependentes: (form.dependentes||[]).reduce((s,d)=>s+parseFloat(d.valor_coparticipacao||0),0),
       data_nascimento: form.data_nascimento || null,
       data_inicio: form.data_inicio || null,
+      data_afastamento: form.data_afastamento || null,
+      data_retorno_afastamento: form.data_retorno_afastamento || null,
+      afastamentos_historico: form.afastamentos_historico || [],
+      ferias_periodos: form.ferias_periodos || [],
+      advertencias: form.advertencias || [],
       documentos: documentos,
       empresa_id: empresaId,
       candidato_id: candidatoId,
@@ -2083,6 +2100,36 @@ function ContratacaoEmp({ data, setData, empresaId, user }) {
   const contratados = data.candidatos.filter(c => c.status === "Contratado");
   const [modalCand, setModalCand] = React.useState(null);
   const [busca, setBusca] = React.useState("");
+  const [infoExtra, setInfoExtra] = React.useState({}); // candidato_id -> registro contratacoes
+  const [carregandoExtra, setCarregandoExtra] = React.useState(true);
+
+  const carregarExtra = React.useCallback(() => {
+    if (!empresaId) return;
+    setCarregandoExtra(true);
+    contratacoesService.listarPorEmpresa(empresaId).then(lista => {
+      const map = {};
+      lista.forEach(r => { if (r.candidato_id) map[r.candidato_id] = r; });
+      setInfoExtra(map);
+      setCarregandoExtra(false);
+    });
+  }, [empresaId]);
+
+  React.useEffect(() => { carregarExtra(); }, [carregarExtra]);
+
+  const mesAtual = new Date().getMonth();
+  const ehAniversarianteMes = (dataNasc) => {
+    if (!dataNasc) return false;
+    const d = new Date(dataNasc + "T00:00:00");
+    return !isNaN(d.getTime()) && d.getMonth() === mesAtual;
+  };
+  const ehPaiOuMae = (reg) => (reg?.dependentes || []).some(dep => dep.parentesco === "Filho(a)");
+
+  const aniversariantes = contratados
+    .map(c => ({ c, extra: infoExtra[c.id] }))
+    .filter(({ extra }) => extra && ehAniversarianteMes(extra.data_nascimento))
+    .sort((a, b) => new Date(a.extra.data_nascimento).getDate() - new Date(b.extra.data_nascimento).getDate());
+
+  const paisMaes = contratados.filter(c => ehPaiOuMae(infoExtra[c.id]));
 
   const filtrados = contratados.filter(c => {
     const q = busca.toLowerCase();
@@ -2094,6 +2141,42 @@ function ContratacaoEmp({ data, setData, empresaId, user }) {
       <div className="page-header">
         <div><div className="page-title">Contratações</div><div className="page-subtitle">{contratados.length} contratado(s)</div></div>
       </div>
+
+      {!carregandoExtra && (aniversariantes.length > 0 || paisMaes.length > 0) && (
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 16 }}>
+          {aniversariantes.length > 0 && (
+            <div className="card" style={{ padding: 14 }}>
+              <div style={{ fontSize: 12, fontWeight: 700, color: "var(--text2)", marginBottom: 8 }}>🎂 Aniversariantes do Mês ({aniversariantes.length})</div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                {aniversariantes.map(({ c, extra }) => (
+                  <div key={c.id} style={{ display: "flex", justifyContent: "space-between", fontSize: 12 }}>
+                    <span>{c.nome}</span>
+                    <span style={{ color: "var(--text3)" }}>{new Date(extra.data_nascimento + "T00:00:00").toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+          {paisMaes.length > 0 && (
+            <div className="card" style={{ padding: 14 }}>
+              <div style={{ fontSize: 12, fontWeight: 700, color: "var(--text2)", marginBottom: 8 }}>👨‍👩‍👧 Pais e Mães ({paisMaes.length})</div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                {paisMaes.map(c => {
+                  const extra = infoExtra[c.id];
+                  const nFilhos = (extra?.dependentes || []).filter(d => d.parentesco === "Filho(a)").length;
+                  return (
+                    <div key={c.id} style={{ display: "flex", justifyContent: "space-between", fontSize: 12 }}>
+                      <span>{c.nome}</span>
+                      <span style={{ color: "var(--text3)" }}>{nFilhos} filho{nFilhos > 1 ? "s" : ""}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
       <div className="filter-section">
         <div className="filter-row">
           <div style={{ position: "relative", flex: 1, minWidth: 200 }}>
@@ -2111,29 +2194,40 @@ function ContratacaoEmp({ data, setData, empresaId, user }) {
         </div>
       ) : (
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(460px,1fr))", gap: 14 }}>
-          {filtrados.map(c => (
-            <div key={c.id} className="card" style={{ display: "flex", gap: 14, alignItems: "flex-start", padding: 16 }}>
-              <div style={{ width: 42, height: 42, borderRadius: "50%", background: "linear-gradient(135deg,#5865f2,#9f7aea)", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 800, fontSize: 16, flexShrink: 0 }}>{ini(c.nome)}</div>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6, flexWrap: "wrap" }}>
-                  <span style={{ fontWeight: 700, fontSize: 14 }}>{c.nome}</span>
-                  <span className="badge" style={{ background: "rgba(88,101,242,0.18)", color: "#5865f2" }}>Contratado</span>
+          {filtrados.map(c => {
+            const extra = infoExtra[c.id];
+            const aniversariante = extra && ehAniversarianteMes(extra.data_nascimento);
+            const paiMae = ehPaiOuMae(extra);
+            const nAdvertencias = (extra?.advertencias || []).length;
+            const calcFerias = extra?.data_inicio ? calcularFerias(extra.data_inicio, extra.ferias_periodos || []) : null;
+            return (
+              <div key={c.id} className="card" style={{ display: "flex", gap: 14, alignItems: "flex-start", padding: 16 }}>
+                <div style={{ width: 42, height: 42, borderRadius: "50%", background: "linear-gradient(135deg,#5865f2,#9f7aea)", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 800, fontSize: 16, flexShrink: 0 }}>{ini(c.nome)}</div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6, flexWrap: "wrap" }}>
+                    <span style={{ fontWeight: 700, fontSize: 14 }}>{c.nome}</span>
+                    <span className="badge" style={{ background: "rgba(88,101,242,0.18)", color: "#5865f2" }}>Contratado</span>
+                    {aniversariante && <span className="badge" style={{ background: "rgba(250,166,26,0.18)", color: "#faa61a" }}>🎂 Aniversariante</span>}
+                    {paiMae && <span className="badge" style={{ background: "rgba(159,122,234,0.18)", color: "#9f7aea" }}>👨‍👩‍👧 {extra.sexo === "Feminino" ? "Mãe" : extra.sexo === "Masculino" ? "Pai" : "Pai/Mãe"}</span>}
+                    {nAdvertencias > 0 && <span className="badge" style={{ background: "rgba(240,71,71,0.18)", color: "#f04747" }}>⚠️ {nAdvertencias} advertência{nAdvertencias > 1 ? "s" : ""}</span>}
+                  </div>
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: "5px 14px", marginBottom: 6 }}>
+                    {c.email && <span style={{ fontSize: 12, color: "var(--text2)" }}>✉ {c.email}</span>}
+                    {c.telefone && <span style={{ fontSize: 12, color: "var(--text2)" }}>📞 {c.telefone}</span>}
+                    {c.vaga && <span style={{ fontSize: 12, color: "var(--text2)" }}>💼 {c.vaga}</span>}
+                    {c.recrutador && <span style={{ fontSize: 11, color: "var(--text3)", background: "var(--bg3)", border: "1px solid var(--border)", borderRadius: 6, padding: "1px 7px" }}>Rec: {c.recrutador}</span>}
+                    {calcFerias && !calcFerias.semPeriodoCompleto && <span style={{ fontSize: 11, color: "var(--text3)", background: "var(--bg3)", border: "1px solid var(--border)", borderRadius: 6, padding: "1px 7px" }}>🏖️ Saldo férias: {calcFerias.saldoTotal}d</span>}
+                  </div>
                 </div>
-                <div style={{ display: "flex", flexWrap: "wrap", gap: "5px 14px", marginBottom: 6 }}>
-                  {c.email && <span style={{ fontSize: 12, color: "var(--text2)" }}>✉ {c.email}</span>}
-                  {c.telefone && <span style={{ fontSize: 12, color: "var(--text2)" }}>📞 {c.telefone}</span>}
-                  {c.vaga && <span style={{ fontSize: 12, color: "var(--text2)" }}>💼 {c.vaga}</span>}
-                  {c.recrutador && <span style={{ fontSize: 11, color: "var(--text3)", background: "var(--bg3)", border: "1px solid var(--border)", borderRadius: 6, padding: "1px 7px" }}>Rec: {c.recrutador}</span>}
-                </div>
+                <button className="btn btn-ghost btn-sm" style={{ flexShrink: 0, color: "var(--blue)", borderColor: "rgba(91,108,249,0.35)" }} onClick={() => setModalCand(c)}>
+                  <I d={IC.edit} s={12}/>Detalhes
+                </button>
               </div>
-              <button className="btn btn-ghost btn-sm" style={{ flexShrink: 0, color: "var(--blue)", borderColor: "rgba(91,108,249,0.35)" }} onClick={() => setModalCand(c)}>
-                <I d={IC.edit} s={12}/>Detalhes
-              </button>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
-      {modalCand && <ContratacaoModal candidato={modalCand} empresaId={empresaId} onFechar={() => setModalCand(null)}/>}
+      {modalCand && <ContratacaoModal candidato={modalCand} empresaId={empresaId} onFechar={() => { setModalCand(null); carregarExtra(); }}/>}
     </div>
   );
 }
@@ -2202,6 +2296,253 @@ function SecaoDependentes({ form, setForm }) {
         <span>Total Coparticipação Dependentes: <strong style={{ color: "var(--green)" }}>R$ {deps.reduce((s,d)=>s+parseFloat(d.valor_coparticipacao||0),0).toFixed(2)}</strong></span>
       </div>
     )}
+  </>);
+}
+
+// ============================================================
+// AFASTAMENTO
+// ============================================================
+const TIPOS_AFASTAMENTO = [
+  "Atestado Médico", "Auxílio-Doença (INSS)", "Acidente de Trabalho",
+  "Licença Maternidade", "Licença Paternidade", "Licença Casamento (Gala)",
+  "Licença Óbito (Nojo)", "Serviço Militar", "Doação de Sangue",
+  "Júri / Convocação Judicial", "Suspensão Disciplinar",
+  "Licença sem Vencimento", "Licença Médica Psiquiátrica", "Outro"
+];
+
+function SecaoAfastamento({ form, setForm }) {
+  const base = { background: "var(--bg3)", border: "1px solid var(--border)", borderRadius: "var(--radius-sm)", color: "var(--text)", fontSize: 12, padding: "7px 9px", width: "100%", outline: "none" };
+  const hist = form.afastamentos_historico || [];
+  const temAtivo = !!(form.afastamento_tipo || form.data_afastamento);
+
+  const encerrar = () => {
+    if (!form.data_retorno_afastamento) { alert("Preencha a Data de Retorno antes de encerrar o afastamento."); return; }
+    const registro = {
+      id: Date.now(),
+      tipo: form.afastamento_tipo === "Outro" ? (form.afastamento_tipo_outro || "Outro") : form.afastamento_tipo,
+      data_afastamento: form.data_afastamento,
+      data_retorno: form.data_retorno_afastamento,
+      motivo: form.motivo_afastamento
+    };
+    setForm(f => ({
+      ...f,
+      afastamentos_historico: [registro, ...(f.afastamentos_historico||[])],
+      afastamento_tipo: "", afastamento_tipo_outro: "", data_afastamento: "", data_retorno_afastamento: "", motivo_afastamento: ""
+    }));
+  };
+
+  const removerHistorico = (id) => {
+    if (!window.confirm("Remover este registro do histórico?")) return;
+    setForm(f => ({ ...f, afastamentos_historico: (f.afastamentos_historico||[]).filter(h => h.id !== id) }));
+  };
+
+  return (<>
+    <div className="modal-section">🏥 Afastamento</div>
+    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+      <div className="form-group">
+        <label className="form-label">Tipo de Afastamento</label>
+        <select className="form-input" value={form.afastamento_tipo||""} onChange={e => setForm(f => ({ ...f, afastamento_tipo: e.target.value }))}>
+          <option value="">Nenhum afastamento ativo</option>
+          {TIPOS_AFASTAMENTO.map(o => <option key={o} value={o}>{o}</option>)}
+        </select>
+      </div>
+      {form.afastamento_tipo === "Outro" && (
+        <div className="form-group">
+          <label className="form-label">Especifique o Tipo</label>
+          <input className="form-input" value={form.afastamento_tipo_outro||""} onChange={e => setForm(f => ({ ...f, afastamento_tipo_outro: e.target.value }))} placeholder="Descreva o tipo de afastamento"/>
+        </div>
+      )}
+      <div className="form-group">
+        <label className="form-label">Data de Início</label>
+        <input className="form-input" type="date" value={form.data_afastamento||""} onChange={e => setForm(f => ({ ...f, data_afastamento: e.target.value }))}/>
+      </div>
+      <div className="form-group">
+        <label className="form-label">Data de Retorno</label>
+        <input className="form-input" type="date" value={form.data_retorno_afastamento||""} onChange={e => setForm(f => ({ ...f, data_retorno_afastamento: e.target.value }))}/>
+      </div>
+      <div className="form-group" style={{ gridColumn: "1/-1" }}>
+        <label className="form-label">Motivo / Observações</label>
+        <textarea className="form-textarea" style={{ resize: "vertical" }} value={form.motivo_afastamento||""} onChange={e => setForm(f => ({ ...f, motivo_afastamento: e.target.value }))} placeholder="Detalhes adicionais (opcional)"/>
+      </div>
+    </div>
+    {temAtivo && (
+      <div style={{ marginBottom: 14 }}>
+        <button onClick={encerrar} style={{ fontSize: 11, fontWeight: 700, color: "var(--green)", background: "var(--green-dim)", border: "1px solid var(--green)", borderRadius: 8, padding: "5px 12px", cursor: "pointer" }}>
+          ✓ Encerrar afastamento e mover para histórico
+        </button>
+      </div>
+    )}
+    {hist.length > 0 && (<>
+      <div style={{ fontSize: 12, fontWeight: 700, color: "var(--text2)", marginBottom: 8 }}>Histórico de Afastamentos</div>
+      {hist.map(h => (
+        <div key={h.id} style={{ background: "var(--bg3)", border: "1px solid var(--border)", borderRadius: "var(--radius-sm)", padding: 10, marginBottom: 8, fontSize: 12 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <span style={{ fontWeight: 700 }}>{h.tipo}</span>
+            <button onClick={() => removerHistorico(h.id)} style={{ fontSize: 11, color: "#f04747", background: "rgba(240,71,71,0.1)", border: "1px solid rgba(240,71,71,0.2)", borderRadius: 6, padding: "2px 8px", cursor: "pointer" }}>Remover</button>
+          </div>
+          <div style={{ color: "var(--text3)", marginTop: 4 }}>
+            {h.data_afastamento || "—"} até {h.data_retorno || "—"}{h.motivo ? ` · ${h.motivo}` : ""}
+          </div>
+        </div>
+      ))}
+    </>)}
+  </>);
+}
+
+// ============================================================
+// FÉRIAS — cálculo de saldo e data limite (padrão CLT)
+// ============================================================
+function calcularFerias(dataAdmissao, periodosTirados) {
+  if (!dataAdmissao) return null;
+  const admissao = new Date(dataAdmissao + "T00:00:00");
+  const hoje = new Date();
+  if (isNaN(admissao.getTime())) return null;
+
+  // Monta os períodos aquisitivos completos (12 em 12 meses desde a admissão)
+  const periodos = [];
+  let cursor = new Date(admissao);
+  let idx = 0;
+  while (true) {
+    const inicioAquis = new Date(cursor);
+    const fimAquis = new Date(cursor); fimAquis.setFullYear(fimAquis.getFullYear() + 1);
+    if (fimAquis > hoje) break;
+    const limiteConcessivo = new Date(fimAquis); limiteConcessivo.setFullYear(limiteConcessivo.getFullYear() + 1);
+    periodos.push({ idx, inicioAquis, fimAquis, limiteConcessivo, direito: 30, tirado: 0 });
+    cursor = fimAquis;
+    idx++;
+  }
+  if (periodos.length === 0) return { periodos: [], saldoTotal: 0, dataLimite: null, semPeriodoCompleto: true };
+
+  // Aloca os dias já tirados nos períodos mais antigos primeiro (FIFO)
+  let diasPool = (periodosTirados || []).reduce((s, p) => s + (parseInt(p.dias) || 0), 0);
+  for (const p of periodos) {
+    const usar = Math.min(diasPool, p.direito);
+    p.tirado = usar;
+    diasPool -= usar;
+  }
+  const saldoTotal = periodos.reduce((s, p) => s + (p.direito - p.tirado), 0);
+  const periodoPendente = periodos.find(p => p.tirado < p.direito);
+  const dataLimite = periodoPendente ? periodoPendente.limiteConcessivo : null;
+  return { periodos, saldoTotal, dataLimite };
+}
+
+const fmtData = (d) => d ? new Date(d).toLocaleDateString("pt-BR") : "—";
+
+function SecaoFerias({ form, setForm }) {
+  const periodos = form.ferias_periodos || [];
+  const [novo, setNovo] = React.useState({ data_inicio: "", data_fim: "", dias: "" });
+
+  const addPeriodo = () => {
+    if (!novo.data_inicio || !novo.dias) { alert("Preencha ao menos a Data de Início e a Quantidade de Dias."); return; }
+    setForm(f => ({ ...f, ferias_periodos: [...(f.ferias_periodos || []), { id: Date.now(), ...novo, dias: parseInt(novo.dias) || 0 }] }));
+    setNovo({ data_inicio: "", data_fim: "", dias: "" });
+  };
+  const remPeriodo = (id) => setForm(f => ({ ...f, ferias_periodos: (f.ferias_periodos || []).filter(p => p.id !== id) }));
+
+  const calc = calcularFerias(form.data_inicio, periodos);
+  const base = { background: "var(--bg3)", border: "1px solid var(--border)", borderRadius: "var(--radius-sm)", color: "var(--text)", fontSize: 12, padding: "7px 9px", width: "100%", outline: "none" };
+
+  return (<>
+    <div className="modal-section">🏖️ Férias</div>
+
+    {!form.data_inicio ? (
+      <div style={{ fontSize: 12, color: "var(--text3)", marginBottom: 12 }}>Preencha a Data de Início (contratual) para calcular o saldo automaticamente.</div>
+    ) : calc.semPeriodoCompleto ? (
+      <div style={{ fontSize: 12, color: "var(--text3)", marginBottom: 12, padding: 10, background: "var(--bg3)", borderRadius: "var(--radius-sm)" }}>
+        Ainda não completou 12 meses de casa — nenhum período aquisitivo concluído até o momento.
+      </div>
+    ) : (
+      <div style={{ display: "flex", gap: 16, flexWrap: "wrap", marginBottom: 12, padding: 12, background: "var(--bg3)", border: "1px solid var(--border)", borderRadius: "var(--radius-sm)" }}>
+        <div>
+          <div style={{ fontSize: 9, color: "var(--text3)", fontWeight: 700, textTransform: "uppercase" }}>Saldo Atual</div>
+          <div style={{ fontSize: 16, fontWeight: 800, color: calc.saldoTotal > 0 ? "var(--green)" : "var(--text2)" }}>{calc.saldoTotal} dias</div>
+        </div>
+        <div>
+          <div style={{ fontSize: 9, color: "var(--text3)", fontWeight: 700, textTransform: "uppercase" }}>Data Limite p/ Tirar</div>
+          <div style={{ fontSize: 16, fontWeight: 800, color: calc.dataLimite ? "#f04747" : "var(--text2)" }}>{calc.dataLimite ? fmtData(calc.dataLimite) : "—"}</div>
+        </div>
+        <div>
+          <div style={{ fontSize: 9, color: "var(--text3)", fontWeight: 700, textTransform: "uppercase" }}>Períodos Completos</div>
+          <div style={{ fontSize: 16, fontWeight: 800 }}>{calc.periodos.length}</div>
+        </div>
+      </div>
+    )}
+
+    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 100px auto", gap: 8, alignItems: "end", marginBottom: 12 }}>
+      <div><label className="form-label">Data de Início</label><input type="date" style={base} value={novo.data_inicio} onChange={e => setNovo(n => ({ ...n, data_inicio: e.target.value }))}/></div>
+      <div><label className="form-label">Data de Fim</label><input type="date" style={base} value={novo.data_fim} onChange={e => setNovo(n => ({ ...n, data_fim: e.target.value }))}/></div>
+      <div><label className="form-label">Dias</label><input type="number" style={base} value={novo.dias} onChange={e => setNovo(n => ({ ...n, dias: e.target.value }))} placeholder="30"/></div>
+      <button onClick={addPeriodo} style={{ fontSize: 11, fontWeight: 700, color: "var(--green)", background: "var(--green-dim)", border: "1px solid var(--green)", borderRadius: 8, padding: "7px 12px", cursor: "pointer", height: 32 }}>+ Registrar</button>
+    </div>
+
+    {periodos.length === 0 ? (
+      <div style={{ fontSize: 12, color: "var(--text3)", marginBottom: 12 }}>Nenhum período de férias registrado ainda.</div>
+    ) : (
+      periodos.slice().sort((a,b)=> new Date(b.data_inicio) - new Date(a.data_inicio)).map(p => (
+        <div key={p.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", background: "var(--bg3)", border: "1px solid var(--border)", borderRadius: "var(--radius-sm)", padding: "8px 12px", marginBottom: 6, fontSize: 12 }}>
+          <span>{fmtData(p.data_inicio)} até {p.data_fim ? fmtData(p.data_fim) : "—"} · <strong>{p.dias} dias</strong></span>
+          <button onClick={() => remPeriodo(p.id)} style={{ fontSize: 11, color: "#f04747", background: "rgba(240,71,71,0.1)", border: "1px solid rgba(240,71,71,0.2)", borderRadius: 6, padding: "2px 8px", cursor: "pointer" }}>Remover</button>
+        </div>
+      ))
+    )}
+  </>);
+}
+
+// ============================================================
+// ADVERTÊNCIAS
+// ============================================================
+function SecaoAdvertencias({ form, setForm }) {
+  const lista = form.advertencias || [];
+  const [novo, setNovo] = React.useState({ tipo: "", data: "", descricao: "", dias_suspensao: "" });
+  const base = { background: "var(--bg3)", border: "1px solid var(--border)", borderRadius: "var(--radius-sm)", color: "var(--text)", fontSize: 12, padding: "7px 9px", width: "100%", outline: "none" };
+
+  const addAdvertencia = () => {
+    if (!novo.tipo || !novo.data) { alert("Preencha o Tipo e a Data da advertência."); return; }
+    setForm(f => ({ ...f, advertencias: [{ id: Date.now(), ...novo }, ...(f.advertencias || [])] }));
+    setNovo({ tipo: "", data: "", descricao: "", dias_suspensao: "" });
+  };
+  const remAdvertencia = (id) => {
+    if (!window.confirm("Remover esta advertência?")) return;
+    setForm(f => ({ ...f, advertencias: (f.advertencias || []).filter(a => a.id !== id) }));
+  };
+
+  const corTipo = t => t === "Verbal" ? "var(--yellow, #faa61a)" : t === "Escrita" ? "#f04747" : t === "Suspensão" ? "#9f7aea" : "var(--text2)";
+
+  return (<>
+    <div className="modal-section">⚠️ Advertências</div>
+    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 8 }}>
+      <div>
+        <label className="form-label">Tipo</label>
+        <select style={base} value={novo.tipo} onChange={e => setNovo(n => ({ ...n, tipo: e.target.value }))}>
+          <option value="">Selecione</option>
+          <option value="Verbal">Verbal</option>
+          <option value="Escrita">Escrita</option>
+          <option value="Suspensão">Suspensão</option>
+        </select>
+      </div>
+      <div><label className="form-label">Data</label><input type="date" style={base} value={novo.data} onChange={e => setNovo(n => ({ ...n, data: e.target.value }))}/></div>
+      {novo.tipo === "Suspensão" && (
+        <div><label className="form-label">Dias de Suspensão</label><input type="number" style={base} value={novo.dias_suspensao} onChange={e => setNovo(n => ({ ...n, dias_suspensao: e.target.value }))} placeholder="Ex: 3"/></div>
+      )}
+      <div style={{ gridColumn: "1/-1" }}>
+        <label className="form-label">Motivo / Descrição</label>
+        <textarea className="form-textarea" style={{ resize: "vertical" }} value={novo.descricao} onChange={e => setNovo(n => ({ ...n, descricao: e.target.value }))} placeholder="Descreva o ocorrido"/>
+      </div>
+    </div>
+    <div style={{ marginBottom: 14 }}>
+      <button onClick={addAdvertencia} style={{ fontSize: 11, fontWeight: 700, color: "var(--green)", background: "var(--green-dim)", border: "1px solid var(--green)", borderRadius: 8, padding: "5px 12px", cursor: "pointer" }}>+ Registrar Advertência</button>
+    </div>
+    {lista.length === 0 ? (
+      <div style={{ fontSize: 12, color: "var(--text3)", marginBottom: 12 }}>Nenhuma advertência registrada.</div>
+    ) : lista.map(a => (
+      <div key={a.id} style={{ background: "var(--bg3)", border: "1px solid var(--border)", borderRadius: "var(--radius-sm)", padding: 10, marginBottom: 8, fontSize: 12 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <span style={{ fontWeight: 700, color: corTipo(a.tipo) }}>{a.tipo}{a.tipo === "Suspensão" && a.dias_suspensao ? ` (${a.dias_suspensao} dia${a.dias_suspensao > 1 ? "s" : ""})` : ""}</span>
+          <button onClick={() => remAdvertencia(a.id)} style={{ fontSize: 11, color: "#f04747", background: "rgba(240,71,71,0.1)", border: "1px solid rgba(240,71,71,0.2)", borderRadius: 6, padding: "2px 8px", cursor: "pointer" }}>Remover</button>
+        </div>
+        <div style={{ color: "var(--text3)", marginTop: 4 }}>{fmtData(a.data)}{a.descricao ? ` · ${a.descricao}` : ""}</div>
+      </div>
+    ))}
   </>);
 }
 
@@ -2302,9 +2643,14 @@ function ContratacaoModal({ candidato, empresaId, onFechar }) {
   const FORM_VAZIO = {
     // Dados pessoais
     tipo_contrato: "", foto_url: "",
-    data_nascimento: "", rg: "", cpf: "", pis: "", pix: "",
+    data_nascimento: "", rg: "", cpf: "", pis: "", pix: "", tipo_chave_pix: "",
     estado_civil: "", escolaridade: "", curso_superior: "", curso_semestre: "", curso_modalidade: "", nome_mae: "", nome_pai: "",
-    raca_cor: "",
+    raca_cor: "", sexo: "",
+    // Contato de emergência
+    contato_emergencia_nome: "", contato_emergencia_parentesco: "", contato_emergencia_telefone: "",
+    // Afastamento (ativo)
+    afastamento_tipo: "", afastamento_tipo_outro: "", data_afastamento: "", data_retorno_afastamento: "", motivo_afastamento: "",
+    afastamentos_historico: [],
     cep: "", endereco: "", numero: "", complemento: "", bairro: "", cidade: "", estado: "",
     banco: "", agencia: "", conta: "", tipo_conta: "",
     ctps_numero: "", ctps_serie: "", ctps_uf: "",
@@ -2327,6 +2673,9 @@ function ContratacaoModal({ candidato, empresaId, onFechar }) {
     coparticipacao_titular: "", coparticipacao_dependentes: "",
     // Dependentes
     dependentes: [],
+    // Férias e Advertências
+    ferias_periodos: [],
+    advertencias: [],
   };
 
   const [form, setForm] = React.useState(FORM_VAZIO);
@@ -2355,6 +2704,19 @@ function ContratacaoModal({ candidato, empresaId, onFechar }) {
           cpf: existente.cpf || "",
           pis: existente.pis || "",
           pix: existente.pix || "",
+          tipo_chave_pix: existente.tipo_chave_pix || "",
+          sexo: existente.sexo || "",
+          contato_emergencia_nome: existente.contato_emergencia_nome || "",
+          contato_emergencia_parentesco: existente.contato_emergencia_parentesco || "",
+          contato_emergencia_telefone: existente.contato_emergencia_telefone || "",
+          afastamento_tipo: existente.afastamento_tipo || "",
+          afastamento_tipo_outro: existente.afastamento_tipo_outro || "",
+          data_afastamento: existente.data_afastamento || "",
+          data_retorno_afastamento: existente.data_retorno_afastamento || "",
+          motivo_afastamento: existente.motivo_afastamento || "",
+          afastamentos_historico: existente.afastamentos_historico || [],
+          ferias_periodos: existente.ferias_periodos || [],
+          advertencias: existente.advertencias || [],
           estado_civil: existente.estado_civil || "",
           escolaridade: existente.escolaridade || "",
           curso_superior: existente.curso_superior || "",
@@ -2544,8 +2906,10 @@ function ContratacaoModal({ candidato, empresaId, onFechar }) {
                   <CampoContratacao form={form} onChange={handleChange} label="Semestre" name="curso_semestre" placeholder="Ex: 3º semestre"/>
                   <CampoContratacao form={form} onChange={handleChange} label="Modalidade" name="curso_modalidade" type="select" options={["Presencial","Online","Híbrido"]}/>
                 </>)}
+                <CampoContratacao form={form} onChange={handleChange} label="Sexo" name="sexo" type="select" options={["Masculino","Feminino"]}/>
                 <CampoContratacao form={form} onChange={handleChange} label="Nome da Mãe" name="nome_mae" placeholder="Nome completo"/>
                 <CampoContratacao form={form} onChange={handleChange} label="Nome do Pai" name="nome_pai" placeholder="Nome completo (ou N/A)"/>
+                <CampoContratacao form={form} onChange={handleChange} label="Tipo de Chave PIX" name="tipo_chave_pix" type="select" options={["CPF","E-mail","Telefone","Chave Aleatória"]}/>
                 <CampoContratacao form={form} onChange={handleChange} label="PIX (chave)" name="pix" placeholder="CPF, e-mail ou telefone"/>
                 <CampoContratacao form={form} onChange={handleChange} label="Raça/Cor (autodeclaração)" name="raca_cor" type="select" options={["Branca","Preta","Parda","Amarela","Indígena","Prefiro não informar"]}/>
               </div>
@@ -2569,6 +2933,14 @@ function ContratacaoModal({ candidato, empresaId, onFechar }) {
                 <CampoContratacao form={form} onChange={handleChange} label="Agência" name="agencia" placeholder="0000"/>
                 <CampoContratacao form={form} onChange={handleChange} label="Conta" name="conta" placeholder="00000-0"/>
                 <CampoContratacao form={form} onChange={handleChange} label="Tipo de Conta" name="tipo_conta" type="select" options={["Corrente","Poupança","Conta Salário"]}/>
+              </div>
+
+              {/* Contato de Emergência */}
+              <div className="modal-section">🚨 Contato de Emergência</div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                <CampoContratacao form={form} onChange={handleChange} label="Nome" name="contato_emergencia_nome" placeholder="Nome completo"/>
+                <CampoContratacao form={form} onChange={handleChange} label="Parentesco" name="contato_emergencia_parentesco" placeholder="Ex: Mãe, Cônjuge, Irmão(ã)"/>
+                <CampoContratacao form={form} onChange={handleChange} label="Telefone" name="contato_emergencia_telefone" placeholder="(11) 99999-9999"/>
               </div>
 
               {/* Documentos CLT */}
@@ -2629,6 +3001,15 @@ function ContratacaoModal({ candidato, empresaId, onFechar }) {
 
               {/* Dependentes */}
               <SecaoDependentes form={form} setForm={setForm}/>
+
+              {/* Afastamento */}
+              <SecaoAfastamento form={form} setForm={setForm}/>
+
+              {/* Férias */}
+              <SecaoFerias form={form} setForm={setForm}/>
+
+              {/* Advertências */}
+              <SecaoAdvertencias form={form} setForm={setForm}/>
 
               {/* Dados contratuais */}
               <div className="modal-section">📝 Dados Contratuais</div>
