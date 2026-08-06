@@ -183,6 +183,11 @@ tr:hover td{background:var(--green-dim2)}
 @media(max-width:1100px){.kpi-grid{grid-template-columns:repeat(2,1fr)}.grid-3-1{grid-template-columns:1fr}}
 @media(max-width:768px){.grid-2{grid-template-columns:1fr}.sidebar{width:200px}}
 @media(max-width:600px){.sidebar{display:none}.kpi-grid{grid-template-columns:1fr 1fr}}
+@media print {
+  .no-print, .sidebar, .topbar { display: none !important; }
+  .main, .content { margin: 0 !important; padding: 0 !important; }
+  body, .app { background: #fff !important; }
+}
 </style>
 </head>
 <body>
@@ -301,6 +306,38 @@ const origensService = {
 // ============================================================
 // SERVICE: CONTRATAÇÕES
 // ============================================================
+// ============================================================
+// CARTÃO CORPORATIVO
+// ============================================================
+const cartaoService = {
+  listarPorEmpresa: async (empresaId) => {
+    try {
+      const r = await fetch(`${SB_URL}/rest/v1/cartao_corporativo?empresa_id=eq.${empresaId}&select=*&order=data_compra.desc`, {
+        headers: { "apikey": SB_KEY, "Authorization": `Bearer ${SB_KEY}` }
+      });
+      const data = await r.json();
+      return Array.isArray(data) ? data : [];
+    } catch (e) { console.error("[cartao.listar]", e); return []; }
+  },
+  criar: async (registro) => {
+    try {
+      const r = await fetch(`${SB_URL}/rest/v1/cartao_corporativo`, {
+        method: "POST",
+        headers: { "apikey": SB_KEY, "Authorization": `Bearer ${SB_KEY}`, "Content-Type": "application/json", "Prefer": "return=representation" },
+        body: JSON.stringify(registro)
+      });
+      const data = await r.json();
+      return { ok: r.ok, item: Array.isArray(data) ? data[0] : data };
+    } catch (e) { console.error("[cartao.criar]", e); return { ok: false }; }
+  },
+  remover: async (id) => {
+    try {
+      await fetch(`${SB_URL}/rest/v1/cartao_corporativo?id=eq.${id}`, { method: "DELETE", headers: { "apikey": SB_KEY, "Authorization": `Bearer ${SB_KEY}` } });
+      return true;
+    } catch (e) { console.error("[cartao.remover]", e); return false; }
+  },
+};
+
 const contratacoesService = {
   buscarPorCandidato: async (candidatoId) => {
     try {
@@ -441,6 +478,7 @@ const IC = {
   upload: "M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4 M17 8l-5-5-5 5 M12 3v12",
   check: "M20 6L9 17l-5-5",
   solicit: "M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4",
+  card: "M1 4h22v16H1z M1 10h22",
 };
 
 // ============================================================
@@ -719,6 +757,7 @@ function SistemaEmpresa({ user, onLogout }) {
   const podeCriarUsuarios = PERMS.podeGerenciarUsuarios(user.perfil);
   const podeEditarVagas = PERMS.podeGerenciarVagas(user.perfil);
   const podeEditarOrigens = PERMS.podeGerenciarOrigens(user.perfil);
+  const podeVerFinanceiro = user.perfil === "master" || user.acesso_financeiro === true;
 
   const meusCandidatos = podeVerTudo ? data.candidatos : data.candidatos.filter(c => {
     const rec = (c.recrutador || "").toLowerCase().trim();
@@ -739,6 +778,7 @@ function SistemaEmpresa({ user, onLogout }) {
     { id: "agenda", label: "Agenda", always: true, icon: IC.cal },
     { id: "pipeline", label: "Pipeline", always: true, icon: IC.funnel },
     { id: "contratacao", label: "Contratação", always: true, icon: IC.contract, badge: contratados.length },
+    ...(podeVerFinanceiro ? [{ id: "financeiro", label: "Cartão Corporativo", always: true, icon: IC.card }] : []),
     { id: "solicitacoes", label: "Solicitações", perm: podeCriarUsuarios, icon: IC.solicit, badge: (() => { try { return parseInt(localStorage.getItem(`sol_badge_${empId}`) || "0"); } catch(e){ return 0; } })() },
     { id: "usuarios", label: "Usuários", perm: podeCriarUsuarios, icon: IC.users },
     { id: "origens", label: "Origens", perm: podeEditarOrigens, icon: IC.filter },
@@ -813,7 +853,7 @@ function SistemaEmpresa({ user, onLogout }) {
       <div className="main">
         <header className="topbar">
           <div className="topbar-title" style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            {{ dashboard: "Dashboard", candidatos: "Candidatos", vagas: "Vagas", agenda: "Agenda", pipeline: "Pipeline", contratacao: "Contratação", solicitacoes: "Solicitações", usuarios: "Usuários", origens: "Origens" }[page] || page}
+            {{ dashboard: "Dashboard", candidatos: "Candidatos", vagas: "Vagas", agenda: "Agenda", pipeline: "Pipeline", contratacao: "Contratação", solicitacoes: "Solicitações", usuarios: "Usuários", origens: "Origens", financeiro: "Cartão Corporativo" }[page] || page}
             {minhasEmpresas.length > 0 && <span style={{ fontSize: 10, fontWeight: 600, color: "var(--text3)", background: "var(--bg3)", border: "1px solid var(--border)", borderRadius: 20, padding: "2px 8px" }}>{empresaAtivaObj?.nome}</span>}
           </div>
           <div style={{ fontSize: 11, color: "var(--green)", background: "var(--green-dim)", padding: "4px 12px", borderRadius: 20, fontWeight: 600 }}>🟢 Online</div>
@@ -837,6 +877,7 @@ function SistemaEmpresa({ user, onLogout }) {
               {page === "agenda" && <AgendaEmp data={{ ...data, candidatos: meusCandidatos }}/>}
               {page === "pipeline" && <PipelineEmp data={{ ...data, candidatos: meusCandidatos }} setData={setData} empresaId={empId} allUsuarios={allUsuarios} allEmpresas={allEmpresas} onEtapasChange={setEtapasCustom}/>}
               {page === "contratacao" && <ContratacaoEmp data={data} setData={setData} empresaId={empId} user={user}/>}
+              {page === "financeiro" && (podeVerFinanceiro ? <CartaoCorporativoEmp empresaId={empId} user={user}/> : <AccessDenied/>)}
               {page === "solicitacoes" && (podeCriarUsuarios ? <SolicitacoesRH empresaId={empId} user={user} setData={setData} data={data}/> : <AccessDenied/>)}
               {page === "usuarios" && (podeCriarUsuarios ? <UsuariosEmp empresaId={empId} user={user} minhasEmpresas={minhasEmpresas}/> : <AccessDenied/>)}
               {page === "origens" && (podeEditarOrigens ? <OrigensEmp origens={origens} setOrigens={setOrigens} empresaId={empId}/> : <AccessDenied/>)}
@@ -2096,6 +2137,162 @@ function PipelineEmp({ data, setData, empresaId, allUsuarios, allEmpresas, onEta
 // ============================================================
 // CONTRATAÇÃO — corrigida com carregamento real do Supabase
 // ============================================================
+// ============================================================
+// CARTÃO CORPORATIVO
+// ============================================================
+const CATEGORIAS_CARTAO = ["Alimentação", "Transporte/Combustível", "Material de Escritório", "Software/Assinaturas", "Manutenção", "Marketing", "Viagem/Hospedagem", "Outros"];
+
+function CartaoCorporativoEmp({ empresaId, user }) {
+  const [lista, setLista] = React.useState([]);
+  const [carregando, setCarregando] = React.useState(true);
+  const [salvando, setSalvando] = React.useState(false);
+  const [uploading, setUploading] = React.useState(false);
+  const [mesFiltro, setMesFiltro] = React.useState(() => new Date().toISOString().slice(0,7));
+  const [novo, setNovo] = React.useState({ data_compra: new Date().toISOString().slice(0,10), descricao: "", valor: "", categoria: "", comprovante_url: "", comprovante_nome: "" });
+  const SB_BUCKET_CARTAO = "cartao-corporativo";
+
+  const carregar = React.useCallback(() => {
+    setCarregando(true);
+    cartaoService.listarPorEmpresa(empresaId).then(l => { setLista(l); setCarregando(false); });
+  }, [empresaId]);
+
+  React.useEffect(() => { carregar(); }, [carregar]);
+
+  const doUpload = async (file) => {
+    const allowed = ["application/pdf","image/jpeg","image/png","image/webp"];
+    if (!allowed.includes(file.type)) { alert("Apenas PDF, JPG, PNG ou WebP."); return; }
+    setUploading(true);
+    try {
+      const path = `${empresaId}/${Date.now()}_${file.name}`;
+      const up = await fetch(`${SB_URL}/storage/v1/object/${SB_BUCKET_CARTAO}/${path}`, {
+        method: "POST",
+        headers: { "apikey": SB_KEY, "Authorization": `Bearer ${SB_KEY}`, "Content-Type": file.type, "x-upsert": "true" },
+        body: file
+      });
+      if (up.ok) {
+        const url = `${SB_URL}/storage/v1/object/public/${SB_BUCKET_CARTAO}/${path}`;
+        setNovo(n => ({ ...n, comprovante_url: url, comprovante_nome: file.name }));
+      } else { alert("Erro ao enviar comprovante. Verifique se o bucket 'cartao-corporativo' existe no Supabase Storage."); }
+    } catch (e) { console.error(e); }
+    setUploading(false);
+  };
+
+  const salvar = async () => {
+    if (!novo.data_compra || !novo.descricao || !novo.valor) { alert("Preencha Data, Descrição e Valor."); return; }
+    setSalvando(true);
+    const registro = {
+      empresa_id: empresaId,
+      data_compra: novo.data_compra,
+      descricao: novo.descricao,
+      valor: parseFloat(novo.valor.toString().replace(",", ".")) || 0,
+      categoria: novo.categoria || null,
+      comprovante_url: novo.comprovante_url || null,
+      comprovante_nome: novo.comprovante_nome || null,
+      lancado_por: user?.nome || user?.login || "",
+    };
+    const { ok } = await cartaoService.criar(registro);
+    setSalvando(false);
+    if (ok) {
+      setNovo({ data_compra: new Date().toISOString().slice(0,10), descricao: "", valor: "", categoria: "", comprovante_url: "", comprovante_nome: "" });
+      carregar();
+    } else { alert("Erro ao salvar lançamento."); }
+  };
+
+  const remover = async (id) => {
+    if (!window.confirm("Remover este lançamento?")) return;
+    await cartaoService.remover(id);
+    carregar();
+  };
+
+  const filtrados = lista.filter(l => (l.data_compra || "").slice(0,7) === mesFiltro);
+  const totalMes = filtrados.reduce((s, l) => s + (parseFloat(l.valor) || 0), 0);
+  const fmtMoeda = v => (v || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+
+  const exportarCSV = () => {
+    const linhas = [["Data","Descrição","Categoria","Valor","Lançado por"]];
+    filtrados.forEach(l => linhas.push([fmtData(l.data_compra), l.descricao, l.categoria || "", (l.valor||0).toFixed(2).replace(".",","), l.lancado_por || ""]));
+    const csv = linhas.map(l => l.map(v => `"${(v||"").toString().replace(/"/g,'""')}"`).join(";")).join("\n");
+    const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url; a.download = `cartao_corporativo_${mesFiltro}.csv`; a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const base = { background: "var(--bg3)", border: "1px solid var(--border)", borderRadius: "var(--radius-sm)", color: "var(--text)", fontSize: 12, padding: "7px 9px", width: "100%", outline: "none" };
+
+  return (
+    <div>
+      <div className="page-header no-print">
+        <div><div className="page-title">💳 Cartão Corporativo</div><div className="page-subtitle">Lançamentos do cartão da empresa</div></div>
+      </div>
+
+      <div className="card no-print" style={{ padding: 16, marginBottom: 16 }}>
+        <div style={{ fontSize: 12, fontWeight: 700, color: "var(--text2)", marginBottom: 10 }}>Novo Lançamento</div>
+        <div style={{ display: "grid", gridTemplateColumns: "140px 1fr 140px 180px", gap: 8, marginBottom: 8 }}>
+          <div><label className="form-label">Data</label><input type="date" style={base} value={novo.data_compra} onChange={e => setNovo(n => ({ ...n, data_compra: e.target.value }))}/></div>
+          <div><label className="form-label">Descrição</label><input style={base} value={novo.descricao} onChange={e => setNovo(n => ({ ...n, descricao: e.target.value }))} placeholder="O que foi comprado"/></div>
+          <div><label className="form-label">Valor (R$)</label><input style={base} value={novo.valor} onChange={e => setNovo(n => ({ ...n, valor: e.target.value }))} placeholder="0,00"/></div>
+          <div>
+            <label className="form-label">Categoria</label>
+            <select style={base} value={novo.categoria} onChange={e => setNovo(n => ({ ...n, categoria: e.target.value }))}>
+              <option value="">Selecione</option>
+              {CATEGORIAS_CARTAO.map(c => <option key={c} value={c}>{c}</option>)}
+            </select>
+          </div>
+        </div>
+        <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+          <label style={{ fontSize: 11, fontWeight: 700, color: "var(--blue)", border: "1px solid rgba(91,108,249,0.35)", borderRadius: 8, padding: "7px 12px", cursor: "pointer" }}>
+            📎 {uploading ? "Enviando..." : novo.comprovante_nome ? "Trocar comprovante" : "Anexar comprovante"}
+            <input type="file" accept=".pdf,.jpg,.jpeg,.png,.webp" style={{ display: "none" }} onChange={e => e.target.files[0] && doUpload(e.target.files[0])}/>
+          </label>
+          {novo.comprovante_nome && <span style={{ fontSize: 11, color: "var(--text3)" }}>✓ {novo.comprovante_nome}</span>}
+          <div style={{ flex: 1 }}/>
+          <button onClick={salvar} disabled={salvando} className="btn" style={{ background: "var(--green)", color: "#fff", border: "none", borderRadius: 8, padding: "8px 18px", fontWeight: 700, fontSize: 12, cursor: "pointer" }}>
+            {salvando ? "Salvando..." : "+ Lançar Compra"}
+          </button>
+        </div>
+      </div>
+
+      <div className="filter-section no-print">
+        <div className="filter-row" style={{ alignItems: "center" }}>
+          <label style={{ fontSize: 12, color: "var(--text2)" }}>Mês:</label>
+          <input type="month" style={{ ...base, width: 160 }} value={mesFiltro} onChange={e => setMesFiltro(e.target.value)}/>
+          <div style={{ flex: 1 }}/>
+          <button className="btn btn-ghost btn-sm" onClick={exportarCSV}>⬇ Exportar CSV</button>
+          <button className="btn btn-ghost btn-sm" onClick={() => window.print()}>🖨 Imprimir</button>
+        </div>
+      </div>
+
+      <div className="card" style={{ padding: 14, marginBottom: 16, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <div style={{ fontSize: 12, color: "var(--text2)" }}>{filtrados.length} lançamento(s) em {mesFiltro}</div>
+        <div style={{ fontSize: 18, fontWeight: 800, color: "var(--green)" }}>Total: {fmtMoeda(totalMes)}</div>
+      </div>
+
+      {carregando ? (
+        <div style={{ textAlign: "center", padding: 40, color: "var(--text2)" }}>Carregando...</div>
+      ) : filtrados.length === 0 ? (
+        <div className="empty-state card"><div style={{ fontSize: 40, marginBottom: 10 }}>💳</div><div style={{ fontFamily: "var(--font-head)", fontWeight: 700, fontSize: 14 }}>Nenhum lançamento neste mês</div></div>
+      ) : (
+        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          {filtrados.map(l => (
+            <div key={l.id} className="card" style={{ display: "flex", alignItems: "center", gap: 14, padding: 12 }}>
+              <div style={{ fontSize: 12, color: "var(--text3)", width: 80, flexShrink: 0 }}>{fmtData(l.data_compra)}</div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontWeight: 700, fontSize: 13 }}>{l.descricao}</div>
+                <div style={{ fontSize: 11, color: "var(--text3)" }}>{l.categoria || "Sem categoria"} · lançado por {l.lancado_por || "—"}</div>
+              </div>
+              {l.comprovante_url && <a href={l.comprovante_url} target="_blank" rel="noreferrer" className="no-print" style={{ fontSize: 11, color: "var(--blue)" }}>📎 Comprovante</a>}
+              <div style={{ fontWeight: 800, fontSize: 14, width: 100, textAlign: "right" }}>{fmtMoeda(l.valor)}</div>
+              <button className="no-print" onClick={() => remover(l.id)} style={{ fontSize: 11, color: "#f04747", background: "rgba(240,71,71,0.1)", border: "1px solid rgba(240,71,71,0.2)", borderRadius: 6, padding: "4px 9px", cursor: "pointer" }}>Remover</button>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function ContratacaoEmp({ data, setData, empresaId, user }) {
   const contratados = data.candidatos.filter(c => c.status === "Contratado");
   const [modalCand, setModalCand] = React.useState(null);
@@ -3311,7 +3508,7 @@ function UsuariosEmp({ empresaId, user, minhasEmpresas }) {
 
   const salvarEdicao = async () => {
     if (!formEdit.nome || !formEdit.login) return;
-    await db.patch("sistema_usuarios", modalEdit.id, { nome: formEdit.nome, email: formEdit.email, login: formEdit.login.toLowerCase(), perfil: formEdit.perfil });
+    await db.patch("sistema_usuarios", modalEdit.id, { nome: formEdit.nome, email: formEdit.email, login: formEdit.login.toLowerCase(), perfil: formEdit.perfil, acesso_financeiro: !!formEdit.acesso_financeiro });
     setUsuarios(u => u.map(x => x.id === modalEdit.id ? { ...x, ...formEdit, login: formEdit.login.toLowerCase() } : x));
     setModalEdit(null);
   };
@@ -3356,7 +3553,7 @@ function UsuariosEmp({ empresaId, user, minhasEmpresas }) {
                 <div style={{ display: "flex", gap: 6 }}>
                   <button className="btn btn-ghost btn-sm" style={{ fontSize: 10, padding: "4px 7px" }} onClick={() => setModalEmpresas(u)}>🏢</button>
                   <button className="btn btn-ghost btn-sm" style={{ flex: 1, justifyContent: "center" }} onClick={() => toggleAtivo(u)}>{u.ativo ? "Desativar" : "Ativar"}</button>
-                  <button className="btn btn-ghost btn-sm" onClick={() => { setModalEdit(u); setFormEdit({ nome: u.nome, email: u.email || "", login: u.login, perfil: u.perfil }); }} title="Editar dados">✏️</button>
+                  <button className="btn btn-ghost btn-sm" onClick={() => { setModalEdit(u); setFormEdit({ nome: u.nome, email: u.email || "", login: u.login, perfil: u.perfil, acesso_financeiro: !!u.acesso_financeiro }); }} title="Editar dados">✏️</button>
                   <button className="btn btn-ghost btn-sm" onClick={() => { setModalSenha(u); setSenhaNova(""); setMsg(""); }} title="Alterar senha">🔑</button>
                   <button className="btn btn-danger btn-sm" onClick={() => setConfirmDel(u)}><I d={IC.trash} s={11}/></button>
                 </div>
@@ -3380,6 +3577,12 @@ function UsuariosEmp({ empresaId, user, minhasEmpresas }) {
               <div className="form-group"><label className="form-label">Perfil</label><select className="form-input" value={form.perfil} onChange={e => setForm(f => ({ ...f, perfil: e.target.value }))}><option value="coordenador">Coordenador RH</option><option value="assistente">Assistente RH</option><option value="auxiliar">Auxiliar RH</option><option value="gestor">Gestor</option></select></div>
             </div>
             <div className="form-group"><label className="form-label">Senha inicial</label><input className="form-input" value={form.senha_hash} onChange={e => setForm(f => ({ ...f, senha_hash: e.target.value }))}/></div>
+            <div className="form-group" onClick={() => setForm(f => ({ ...f, acesso_financeiro: !f.acesso_financeiro }))} style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer", padding: "9px 12px", background: form.acesso_financeiro ? "rgba(34,197,94,0.1)" : "var(--bg3)", border: `1px solid ${form.acesso_financeiro ? "var(--green)" : "var(--border)"}`, borderRadius: "var(--radius-sm)" }}>
+              <div style={{ width: 16, height: 16, borderRadius: 4, border: `2px solid ${form.acesso_financeiro ? "var(--green)" : "var(--border)"}`, background: form.acesso_financeiro ? "var(--green)" : "transparent", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                {form.acesso_financeiro && <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="#000" strokeWidth="3"><path d="M20 6L9 17l-5-5"/></svg>}
+              </div>
+              <span style={{ fontSize: 13, fontWeight: 600 }}>💳 Acesso ao Cartão Corporativo</span>
+            </div>
             {empresas.length > 1 && (
               <div className="form-group">
                 <label className="form-label">Acesso às empresas *</label>
@@ -3428,6 +3631,12 @@ function UsuariosEmp({ empresaId, user, minhasEmpresas }) {
             <div className="form-row">
               <div className="form-group"><label className="form-label">Login *</label><input className="form-input" value={formEdit.login||""} onChange={e => setFormEdit(f => ({ ...f, login: e.target.value.toLowerCase() }))}/><div className="form-hint">Sem espaços, letras minúsculas</div></div>
               <div className="form-group"><label className="form-label">Perfil</label><select className="form-input" value={formEdit.perfil||""} onChange={e => setFormEdit(f => ({ ...f, perfil: e.target.value }))}><option value="coordenador">Coordenador RH</option><option value="assistente">Assistente RH</option><option value="auxiliar">Auxiliar RH</option><option value="gestor">Gestor</option></select></div>
+            </div>
+            <div className="form-group" onClick={() => setFormEdit(f => ({ ...f, acesso_financeiro: !f.acesso_financeiro }))} style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer", padding: "9px 12px", background: formEdit.acesso_financeiro ? "rgba(34,197,94,0.1)" : "var(--bg3)", border: `1px solid ${formEdit.acesso_financeiro ? "var(--green)" : "var(--border)"}`, borderRadius: "var(--radius-sm)" }}>
+              <div style={{ width: 16, height: 16, borderRadius: 4, border: `2px solid ${formEdit.acesso_financeiro ? "var(--green)" : "var(--border)"}`, background: formEdit.acesso_financeiro ? "var(--green)" : "transparent", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                {formEdit.acesso_financeiro && <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="#000" strokeWidth="3"><path d="M20 6L9 17l-5-5"/></svg>}
+              </div>
+              <span style={{ fontSize: 13, fontWeight: 600 }}>💳 Acesso ao Cartão Corporativo</span>
             </div>
             <div className="modal-actions"><button className="btn btn-ghost" onClick={() => setModalEdit(null)}>Cancelar</button><button className="btn btn-primary" onClick={salvarEdicao} disabled={!formEdit.nome || !formEdit.login}>Salvar</button></div>
           </div>
