@@ -310,6 +310,25 @@ const origensService = {
 // CARTÃO CORPORATIVO
 // ============================================================
 const cartaoService = {
+  obterConfig: async (empresaId) => {
+    try {
+      const r = await fetch(`${SB_URL}/rest/v1/cartao_config?empresa_id=eq.${empresaId}&select=*`, {
+        headers: { "apikey": SB_KEY, "Authorization": `Bearer ${SB_KEY}` }
+      });
+      const data = await r.json();
+      return Array.isArray(data) && data.length > 0 ? data[0] : null;
+    } catch (e) { console.error("[cartao.obterConfig]", e); return null; }
+  },
+  definirLimite: async (empresaId, limite) => {
+    try {
+      const r = await fetch(`${SB_URL}/rest/v1/cartao_config`, {
+        method: "POST",
+        headers: { "apikey": SB_KEY, "Authorization": `Bearer ${SB_KEY}`, "Content-Type": "application/json", "Prefer": "resolution=merge-duplicates,return=representation" },
+        body: JSON.stringify({ empresa_id: empresaId, limite })
+      });
+      return r.ok;
+    } catch (e) { console.error("[cartao.definirLimite]", e); return false; }
+  },
   listarPorEmpresa: async (empresaId) => {
     try {
       const r = await fetch(`${SB_URL}/rest/v1/cartao_corporativo?empresa_id=eq.${empresaId}&select=*&order=data_compra.desc`, {
@@ -2149,7 +2168,22 @@ function CartaoCorporativoEmp({ empresaId, user }) {
   const [uploading, setUploading] = React.useState(false);
   const [mesFiltro, setMesFiltro] = React.useState(() => new Date().toISOString().slice(0,7));
   const [novo, setNovo] = React.useState({ data_compra: new Date().toISOString().slice(0,10), descricao: "", valor: "", categoria: "", comprovante_url: "", comprovante_nome: "" });
+  const [limite, setLimite] = React.useState(null);
+  const [editandoLimite, setEditandoLimite] = React.useState(false);
+  const [limiteInput, setLimiteInput] = React.useState("");
   const SB_BUCKET_CARTAO = "cartao-corporativo";
+
+  const carregarLimite = React.useCallback(() => {
+    cartaoService.obterConfig(empresaId).then(cfg => setLimite(cfg ? parseFloat(cfg.limite) : 0));
+  }, [empresaId]);
+
+  React.useEffect(() => { carregarLimite(); }, [carregarLimite]);
+
+  const salvarLimite = async () => {
+    const v = parseFloat((limiteInput || "0").toString().replace(",", ".")) || 0;
+    const ok = await cartaoService.definirLimite(empresaId, v);
+    if (ok) { setLimite(v); setEditandoLimite(false); } else { alert("Erro ao salvar limite."); }
+  };
 
   const carregar = React.useCallback(() => {
     setCarregando(true);
@@ -2206,6 +2240,8 @@ function CartaoCorporativoEmp({ empresaId, user }) {
 
   const filtrados = lista.filter(l => (l.data_compra || "").slice(0,7) === mesFiltro);
   const totalMes = filtrados.reduce((s, l) => s + (parseFloat(l.valor) || 0), 0);
+  const totalGastoGeral = lista.reduce((s, l) => s + (parseFloat(l.valor) || 0), 0);
+  const saldoRestante = limite !== null ? limite - totalGastoGeral : null;
   const fmtMoeda = v => (v || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 
   const exportarCSV = () => {
@@ -2225,6 +2261,32 @@ function CartaoCorporativoEmp({ empresaId, user }) {
     <div>
       <div className="page-header no-print">
         <div><div className="page-title">💳 Cartão Corporativo</div><div className="page-subtitle">Lançamentos do cartão da empresa</div></div>
+      </div>
+
+      <div className="card" style={{ padding: 16, marginBottom: 16, display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 16 }}>
+        <div>
+          <div style={{ fontSize: 9, color: "var(--text3)", fontWeight: 700, textTransform: "uppercase", marginBottom: 4 }}>Limite do Cartão</div>
+          {editandoLimite ? (
+            <div className="no-print" style={{ display: "flex", gap: 6, alignItems: "center" }}>
+              <input autoFocus style={{ ...base, width: 120 }} value={limiteInput} onChange={e => setLimiteInput(e.target.value)} placeholder="0,00"/>
+              <button onClick={salvarLimite} style={{ fontSize: 11, fontWeight: 700, color: "var(--green)", background: "var(--green-dim)", border: "1px solid var(--green)", borderRadius: 6, padding: "5px 9px", cursor: "pointer" }}>✓</button>
+              <button onClick={() => setEditandoLimite(false)} style={{ fontSize: 11, color: "var(--text3)", background: "transparent", border: "1px solid var(--border)", borderRadius: 6, padding: "5px 9px", cursor: "pointer" }}>✕</button>
+            </div>
+          ) : (
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <span style={{ fontSize: 18, fontWeight: 800 }}>{limite === null ? "..." : fmtMoeda(limite)}</span>
+              <button className="no-print" onClick={() => { setLimiteInput((limite||0).toString().replace(".",",")); setEditandoLimite(true); }} style={{ fontSize: 10, color: "var(--blue)", background: "transparent", border: "none", cursor: "pointer" }}>✏️ editar</button>
+            </div>
+          )}
+        </div>
+        <div>
+          <div style={{ fontSize: 9, color: "var(--text3)", fontWeight: 700, textTransform: "uppercase", marginBottom: 4 }}>Total Gasto (geral)</div>
+          <span style={{ fontSize: 18, fontWeight: 800, color: "#f04747" }}>{fmtMoeda(totalGastoGeral)}</span>
+        </div>
+        <div>
+          <div style={{ fontSize: 9, color: "var(--text3)", fontWeight: 700, textTransform: "uppercase", marginBottom: 4 }}>Saldo Restante</div>
+          <span style={{ fontSize: 18, fontWeight: 800, color: saldoRestante === null ? "var(--text2)" : saldoRestante >= 0 ? "var(--green)" : "#f04747" }}>{saldoRestante === null ? "..." : fmtMoeda(saldoRestante)}</span>
+        </div>
       </div>
 
       <div className="card no-print" style={{ padding: 16, marginBottom: 16 }}>
