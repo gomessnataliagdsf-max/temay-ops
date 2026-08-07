@@ -309,6 +309,74 @@ const origensService = {
 // ============================================================
 // CARTÃO CORPORATIVO
 // ============================================================
+// ============================================================
+// UNIFORMES — estoque e entregas
+// ============================================================
+const uniformesService = {
+  listarEstoque: async (empresaId) => {
+    try {
+      const r = await fetch(`${SB_URL}/rest/v1/uniformes_estoque?empresa_id=eq.${empresaId}&select=*&order=tipo.asc`, {
+        headers: { "apikey": SB_KEY, "Authorization": `Bearer ${SB_KEY}` }
+      });
+      const data = await r.json();
+      return Array.isArray(data) ? data : [];
+    } catch (e) { console.error("[uniformes.listarEstoque]", e); return []; }
+  },
+  criarItemEstoque: async (registro) => {
+    try {
+      const r = await fetch(`${SB_URL}/rest/v1/uniformes_estoque`, {
+        method: "POST",
+        headers: { "apikey": SB_KEY, "Authorization": `Bearer ${SB_KEY}`, "Content-Type": "application/json", "Prefer": "return=representation" },
+        body: JSON.stringify(registro)
+      });
+      const data = await r.json();
+      return { ok: r.ok, item: Array.isArray(data) ? data[0] : data };
+    } catch (e) { console.error("[uniformes.criarItemEstoque]", e); return { ok: false }; }
+  },
+  atualizarQuantidade: async (id, quantidade) => {
+    try {
+      const r = await fetch(`${SB_URL}/rest/v1/uniformes_estoque?id=eq.${id}`, {
+        method: "PATCH",
+        headers: { "apikey": SB_KEY, "Authorization": `Bearer ${SB_KEY}`, "Content-Type": "application/json", "Prefer": "return=representation" },
+        body: JSON.stringify({ quantidade, atualizado_em: new Date().toISOString() })
+      });
+      return r.ok;
+    } catch (e) { console.error("[uniformes.atualizarQuantidade]", e); return false; }
+  },
+  removerItemEstoque: async (id) => {
+    try {
+      await fetch(`${SB_URL}/rest/v1/uniformes_estoque?id=eq.${id}`, { method: "DELETE", headers: { "apikey": SB_KEY, "Authorization": `Bearer ${SB_KEY}` } });
+      return true;
+    } catch (e) { console.error("[uniformes.removerItemEstoque]", e); return false; }
+  },
+  listarEntregas: async (empresaId) => {
+    try {
+      const r = await fetch(`${SB_URL}/rest/v1/uniformes_entregas?empresa_id=eq.${empresaId}&select=*&order=data_entrega.desc`, {
+        headers: { "apikey": SB_KEY, "Authorization": `Bearer ${SB_KEY}` }
+      });
+      const data = await r.json();
+      return Array.isArray(data) ? data : [];
+    } catch (e) { console.error("[uniformes.listarEntregas]", e); return []; }
+  },
+  registrarEntrega: async (registro) => {
+    try {
+      const r = await fetch(`${SB_URL}/rest/v1/uniformes_entregas`, {
+        method: "POST",
+        headers: { "apikey": SB_KEY, "Authorization": `Bearer ${SB_KEY}`, "Content-Type": "application/json", "Prefer": "return=representation" },
+        body: JSON.stringify(registro)
+      });
+      const data = await r.json();
+      return { ok: r.ok, item: Array.isArray(data) ? data[0] : data };
+    } catch (e) { console.error("[uniformes.registrarEntrega]", e); return { ok: false }; }
+  },
+  removerEntrega: async (id) => {
+    try {
+      await fetch(`${SB_URL}/rest/v1/uniformes_entregas?id=eq.${id}`, { method: "DELETE", headers: { "apikey": SB_KEY, "Authorization": `Bearer ${SB_KEY}` } });
+      return true;
+    } catch (e) { console.error("[uniformes.removerEntrega]", e); return false; }
+  },
+};
+
 const cartaoService = {
   obterConfig: async (empresaId) => {
     try {
@@ -498,6 +566,7 @@ const IC = {
   check: "M20 6L9 17l-5-5",
   solicit: "M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4",
   card: "M1 4h22v16H1z M1 10h22",
+  shirt: "M16 4l4 2v4h-3v10H7V10H4V6l4-2 2 2h4l2-2z",
 };
 
 // ============================================================
@@ -797,6 +866,7 @@ function SistemaEmpresa({ user, onLogout }) {
     { id: "agenda", label: "Agenda", always: true, icon: IC.cal },
     { id: "pipeline", label: "Pipeline", always: true, icon: IC.funnel },
     { id: "contratacao", label: "Contratação", always: true, icon: IC.contract, badge: contratados.length },
+    { id: "uniformes", label: "Uniformes", always: true, icon: IC.shirt },
     ...(podeVerFinanceiro ? [{ id: "financeiro", label: "Cartão Corporativo", always: true, icon: IC.card }] : []),
     { id: "solicitacoes", label: "Solicitações", perm: podeCriarUsuarios, icon: IC.solicit, badge: (() => { try { return parseInt(localStorage.getItem(`sol_badge_${empId}`) || "0"); } catch(e){ return 0; } })() },
     { id: "usuarios", label: "Usuários", perm: podeCriarUsuarios, icon: IC.users },
@@ -872,7 +942,7 @@ function SistemaEmpresa({ user, onLogout }) {
       <div className="main">
         <header className="topbar">
           <div className="topbar-title" style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            {{ dashboard: "Dashboard", candidatos: "Candidatos", vagas: "Vagas", agenda: "Agenda", pipeline: "Pipeline", contratacao: "Contratação", solicitacoes: "Solicitações", usuarios: "Usuários", origens: "Origens", financeiro: "Cartão Corporativo" }[page] || page}
+            {{ dashboard: "Dashboard", candidatos: "Candidatos", vagas: "Vagas", agenda: "Agenda", pipeline: "Pipeline", contratacao: "Contratação", solicitacoes: "Solicitações", usuarios: "Usuários", origens: "Origens", financeiro: "Cartão Corporativo", uniformes: "Uniformes" }[page] || page}
             {minhasEmpresas.length > 0 && <span style={{ fontSize: 10, fontWeight: 600, color: "var(--text3)", background: "var(--bg3)", border: "1px solid var(--border)", borderRadius: 20, padding: "2px 8px" }}>{empresaAtivaObj?.nome}</span>}
           </div>
           <div style={{ fontSize: 11, color: "var(--green)", background: "var(--green-dim)", padding: "4px 12px", borderRadius: 20, fontWeight: 600 }}>🟢 Online</div>
@@ -896,6 +966,7 @@ function SistemaEmpresa({ user, onLogout }) {
               {page === "agenda" && <AgendaEmp data={{ ...data, candidatos: meusCandidatos }}/>}
               {page === "pipeline" && <PipelineEmp data={{ ...data, candidatos: meusCandidatos }} setData={setData} empresaId={empId} allUsuarios={allUsuarios} allEmpresas={allEmpresas} onEtapasChange={setEtapasCustom}/>}
               {page === "contratacao" && <ContratacaoEmp data={data} setData={setData} empresaId={empId} user={user}/>}
+              {page === "uniformes" && <UniformesEmp data={data} empresaId={empId} user={user}/>}
               {page === "financeiro" && (podeVerFinanceiro ? <CartaoCorporativoEmp empresaId={empId} user={user}/> : <AccessDenied/>)}
               {page === "solicitacoes" && (podeCriarUsuarios ? <SolicitacoesRH empresaId={empId} user={user} setData={setData} data={data}/> : <AccessDenied/>)}
               {page === "usuarios" && (podeCriarUsuarios ? <UsuariosEmp empresaId={empId} user={user} minhasEmpresas={minhasEmpresas}/> : <AccessDenied/>)}
@@ -2160,6 +2231,170 @@ function PipelineEmp({ data, setData, empresaId, allUsuarios, allEmpresas, onEta
 // CARTÃO CORPORATIVO
 // ============================================================
 const CATEGORIAS_CARTAO = ["Alimentação", "Transporte/Combustível", "Material de Escritório", "Software/Assinaturas", "Manutenção", "Marketing", "Viagem/Hospedagem", "Outros"];
+
+// ============================================================
+// UNIFORMES
+// ============================================================
+const TIPOS_UNIFORME = ["Camiseta", "Blusa de Frio"];
+const TAMANHOS_UNIFORME = ["PP", "P", "M", "G", "GG", "XG"];
+
+function UniformesEmp({ data, empresaId, user }) {
+  const [subTab, setSubTab] = React.useState("estoque");
+  const [estoque, setEstoque] = React.useState([]);
+  const [entregas, setEntregas] = React.useState([]);
+  const [carregando, setCarregando] = React.useState(true);
+  const base = { background: "var(--bg3)", border: "1px solid var(--border)", borderRadius: "var(--radius-sm)", color: "var(--text)", fontSize: 12, padding: "7px 9px", width: "100%", outline: "none" };
+
+  const carregar = React.useCallback(() => {
+    setCarregando(true);
+    Promise.all([uniformesService.listarEstoque(empresaId), uniformesService.listarEntregas(empresaId)]).then(([e, en]) => {
+      setEstoque(e); setEntregas(en); setCarregando(false);
+    });
+  }, [empresaId]);
+
+  React.useEffect(() => { carregar(); }, [carregar]);
+
+  const contratados = (data?.candidatos || []).filter(c => c.status === "Contratado");
+
+  // ---------- Estoque ----------
+  const [novoEstoque, setNovoEstoque] = React.useState({ tipo: "Camiseta", tamanho: "M", cor: "", quantidade: "" });
+  const [salvandoEstoque, setSalvandoEstoque] = React.useState(false);
+
+  const adicionarEstoque = async () => {
+    const qtd = parseInt(novoEstoque.quantidade) || 0;
+    if (qtd <= 0) { alert("Informe uma quantidade válida."); return; }
+    setSalvandoEstoque(true);
+    const existente = estoque.find(e => e.tipo === novoEstoque.tipo && e.tamanho === novoEstoque.tamanho && (e.cor || "") === (novoEstoque.cor || ""));
+    if (existente) {
+      await uniformesService.atualizarQuantidade(existente.id, (existente.quantidade || 0) + qtd);
+    } else {
+      await uniformesService.criarItemEstoque({ empresa_id: empresaId, tipo: novoEstoque.tipo, tamanho: novoEstoque.tamanho, cor: novoEstoque.cor || null, quantidade: qtd });
+    }
+    setSalvandoEstoque(false);
+    setNovoEstoque({ tipo: "Camiseta", tamanho: "M", cor: "", quantidade: "" });
+    carregar();
+  };
+
+  const removerEstoque = async (item) => {
+    if (!window.confirm(`Remover ${item.tipo} ${item.tamanho}${item.cor ? " "+item.cor : ""} do estoque?`)) return;
+    await uniformesService.removerItemEstoque(item.id);
+    carregar();
+  };
+
+  // ---------- Entregas ----------
+  const [novaEntrega, setNovaEntrega] = React.useState({ colaborador_nome: "", candidato_id: "", tipo: "Camiseta", tamanho: "M", cor: "", quantidade: "1", data_entrega: new Date().toISOString().slice(0,10) });
+  const [salvandoEntrega, setSalvandoEntrega] = React.useState(false);
+
+  const registrarEntrega = async () => {
+    const qtd = parseInt(novaEntrega.quantidade) || 0;
+    if (!novaEntrega.colaborador_nome || qtd <= 0) { alert("Informe o colaborador e uma quantidade válida."); return; }
+    const itemEstoque = estoque.find(e => e.tipo === novaEntrega.tipo && e.tamanho === novaEntrega.tamanho && (e.cor || "") === (novaEntrega.cor || ""));
+    const disponivel = itemEstoque ? itemEstoque.quantidade : 0;
+    if (disponivel < qtd) {
+      if (!window.confirm(`Estoque insuficiente (disponível: ${disponivel}). Deseja registrar mesmo assim? O estoque ficará negativo.`)) return;
+    }
+    setSalvandoEntrega(true);
+    const { ok } = await uniformesService.registrarEntrega({
+      empresa_id: empresaId, candidato_id: novaEntrega.candidato_id || null, colaborador_nome: novaEntrega.colaborador_nome,
+      tipo: novaEntrega.tipo, tamanho: novaEntrega.tamanho, cor: novaEntrega.cor || null, quantidade: qtd, data_entrega: novaEntrega.data_entrega
+    });
+    if (ok) {
+      if (itemEstoque) { await uniformesService.atualizarQuantidade(itemEstoque.id, disponivel - qtd); }
+      setNovaEntrega({ colaborador_nome: "", candidato_id: "", tipo: "Camiseta", tamanho: "M", cor: "", quantidade: "1", data_entrega: new Date().toISOString().slice(0,10) });
+    } else { alert("Erro ao registrar entrega."); }
+    setSalvandoEntrega(false);
+    carregar();
+  };
+
+  const removerEntrega = async (item) => {
+    if (!window.confirm("Remover esta entrega? O estoque correspondente será devolvido.")) return;
+    await uniformesService.removerEntrega(item.id);
+    const itemEstoque = estoque.find(e => e.tipo === item.tipo && e.tamanho === item.tamanho && (e.cor || "") === (item.cor || ""));
+    if (itemEstoque) { await uniformesService.atualizarQuantidade(itemEstoque.id, (itemEstoque.quantidade || 0) + (item.quantidade || 0)); }
+    carregar();
+  };
+
+  return (
+    <div>
+      <div className="page-header">
+        <div><div className="page-title">👕 Uniformes</div><div className="page-subtitle">Controle de estoque e entregas — camisetas e blusas de frio</div></div>
+      </div>
+
+      <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
+        <button onClick={() => setSubTab("estoque")} style={{ fontSize: 12, fontWeight: 700, padding: "7px 16px", borderRadius: 8, cursor: "pointer", border: subTab === "estoque" ? "1px solid var(--blue)" : "1px solid var(--border)", background: subTab === "estoque" ? "rgba(91,108,249,0.12)" : "var(--bg3)", color: subTab === "estoque" ? "var(--blue)" : "var(--text2)" }}>📦 Estoque</button>
+        <button onClick={() => setSubTab("entregas")} style={{ fontSize: 12, fontWeight: 700, padding: "7px 16px", borderRadius: 8, cursor: "pointer", border: subTab === "entregas" ? "1px solid var(--blue)" : "1px solid var(--border)", background: subTab === "entregas" ? "rgba(91,108,249,0.12)" : "var(--bg3)", color: subTab === "entregas" ? "var(--blue)" : "var(--text2)" }}>📋 Entregas</button>
+      </div>
+
+      {carregando ? <div style={{ textAlign: "center", padding: 40, color: "var(--text2)" }}>Carregando...</div> : subTab === "estoque" ? (<>
+        <div className="card" style={{ padding: 16, marginBottom: 16 }}>
+          <div style={{ fontSize: 12, fontWeight: 700, color: "var(--text2)", marginBottom: 10 }}>Adicionar ao Estoque</div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 100px 1fr 100px auto", gap: 8, alignItems: "end" }}>
+            <div><label className="form-label">Tipo</label><select style={base} value={novoEstoque.tipo} onChange={e => setNovoEstoque(n => ({ ...n, tipo: e.target.value }))}>{TIPOS_UNIFORME.map(t => <option key={t} value={t}>{t}</option>)}</select></div>
+            <div><label className="form-label">Tamanho</label><select style={base} value={novoEstoque.tamanho} onChange={e => setNovoEstoque(n => ({ ...n, tamanho: e.target.value }))}>{TAMANHOS_UNIFORME.map(t => <option key={t} value={t}>{t}</option>)}</select></div>
+            <div><label className="form-label">Cor</label><input style={base} value={novoEstoque.cor} onChange={e => setNovoEstoque(n => ({ ...n, cor: e.target.value }))} placeholder="Ex: Azul (opcional)"/></div>
+            <div><label className="form-label">Quantidade</label><input type="number" style={base} value={novoEstoque.quantidade} onChange={e => setNovoEstoque(n => ({ ...n, quantidade: e.target.value }))} placeholder="0"/></div>
+            <button onClick={adicionarEstoque} disabled={salvandoEstoque} style={{ fontSize: 11, fontWeight: 700, color: "var(--green)", background: "var(--green-dim)", border: "1px solid var(--green)", borderRadius: 8, padding: "7px 14px", cursor: "pointer", height: 32 }}>+ Adicionar</button>
+          </div>
+        </div>
+        {estoque.length === 0 ? (
+          <div className="empty-state card"><div style={{ fontSize: 40, marginBottom: 10 }}>📦</div><div style={{ fontFamily: "var(--font-head)", fontWeight: 700, fontSize: 14 }}>Nenhum item no estoque ainda</div></div>
+        ) : (
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(220px,1fr))", gap: 10 }}>
+            {estoque.slice().sort((a,b)=> a.tipo.localeCompare(b.tipo) || a.tamanho.localeCompare(b.tamanho)).map(item => (
+              <div key={item.id} className="card" style={{ padding: 12 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+                  <div>
+                    <div style={{ fontWeight: 700, fontSize: 13 }}>{item.tipo}</div>
+                    <div style={{ fontSize: 11, color: "var(--text3)" }}>Tam. {item.tamanho}{item.cor ? ` · ${item.cor}` : ""}</div>
+                  </div>
+                  <button onClick={() => removerEstoque(item)} style={{ fontSize: 10, color: "#f04747", background: "rgba(240,71,71,0.1)", border: "1px solid rgba(240,71,71,0.2)", borderRadius: 6, padding: "2px 7px", cursor: "pointer" }}>✕</button>
+                </div>
+                <div style={{ fontSize: 20, fontWeight: 800, marginTop: 6, color: item.quantidade <= 3 ? "#f04747" : item.quantidade <= 8 ? "#faa61a" : "var(--green)" }}>{item.quantidade} un.</div>
+              </div>
+            ))}
+          </div>
+        )}
+      </>) : (<>
+        <div className="card" style={{ padding: 16, marginBottom: 16 }}>
+          <div style={{ fontSize: 12, fontWeight: 700, color: "var(--text2)", marginBottom: 10 }}>Registrar Entrega</div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 90px 1fr 80px 130px auto", gap: 8, alignItems: "end" }}>
+            <div style={{ gridColumn: "1/3" }}>
+              <label className="form-label">Colaborador</label>
+              <input style={base} list="lista-colaboradores-uniforme" value={novaEntrega.colaborador_nome} onChange={e => {
+                const nome = e.target.value;
+                const match = contratados.find(c => c.nome === nome);
+                setNovaEntrega(n => ({ ...n, colaborador_nome: nome, candidato_id: match ? String(match.id) : "" }));
+              }} placeholder="Digite ou selecione"/>
+              <datalist id="lista-colaboradores-uniforme">{contratados.map(c => <option key={c.id} value={c.nome}/>)}</datalist>
+            </div>
+            <div><label className="form-label">Tipo</label><select style={base} value={novaEntrega.tipo} onChange={e => setNovaEntrega(n => ({ ...n, tipo: e.target.value }))}>{TIPOS_UNIFORME.map(t => <option key={t} value={t}>{t}</option>)}</select></div>
+            <div><label className="form-label">Tam.</label><select style={base} value={novaEntrega.tamanho} onChange={e => setNovaEntrega(n => ({ ...n, tamanho: e.target.value }))}>{TAMANHOS_UNIFORME.map(t => <option key={t} value={t}>{t}</option>)}</select></div>
+            <div><label className="form-label">Cor</label><input style={base} value={novaEntrega.cor} onChange={e => setNovaEntrega(n => ({ ...n, cor: e.target.value }))} placeholder="Opcional"/></div>
+            <div><label className="form-label">Qtd.</label><input type="number" style={base} value={novaEntrega.quantidade} onChange={e => setNovaEntrega(n => ({ ...n, quantidade: e.target.value }))}/></div>
+            <div><label className="form-label">Data</label><input type="date" style={base} value={novaEntrega.data_entrega} onChange={e => setNovaEntrega(n => ({ ...n, data_entrega: e.target.value }))}/></div>
+            <button onClick={registrarEntrega} disabled={salvandoEntrega} style={{ fontSize: 11, fontWeight: 700, color: "var(--green)", background: "var(--green-dim)", border: "1px solid var(--green)", borderRadius: 8, padding: "7px 14px", cursor: "pointer", height: 32 }}>+ Registrar</button>
+          </div>
+        </div>
+        {entregas.length === 0 ? (
+          <div className="empty-state card"><div style={{ fontSize: 40, marginBottom: 10 }}>📋</div><div style={{ fontFamily: "var(--font-head)", fontWeight: 700, fontSize: 14 }}>Nenhuma entrega registrada ainda</div></div>
+        ) : (
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            {entregas.map(en => (
+              <div key={en.id} className="card" style={{ display: "flex", alignItems: "center", gap: 14, padding: 12 }}>
+                <div style={{ fontSize: 12, color: "var(--text3)", width: 80, flexShrink: 0 }}>{fmtData(en.data_entrega)}</div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontWeight: 700, fontSize: 13 }}>{en.colaborador_nome}</div>
+                  <div style={{ fontSize: 11, color: "var(--text3)" }}>{en.tipo} · Tam. {en.tamanho}{en.cor ? ` · ${en.cor}` : ""} · {en.quantidade} un.</div>
+                </div>
+                <button onClick={() => removerEntrega(en)} style={{ fontSize: 11, color: "#f04747", background: "rgba(240,71,71,0.1)", border: "1px solid rgba(240,71,71,0.2)", borderRadius: 6, padding: "4px 9px", cursor: "pointer" }}>Remover</button>
+              </div>
+            ))}
+          </div>
+        )}
+      </>)}
+    </div>
+  );
+}
 
 function CartaoCorporativoEmp({ empresaId, user }) {
   const [lista, setLista] = React.useState([]);
