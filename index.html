@@ -933,18 +933,6 @@ function SistemaEmpresa({ user, onLogout }) {
           <button className={`nav-item${page === "dashboard" ? " active" : ""}`} onClick={() => setPage("dashboard")} style={{ marginBottom: 10 }}>
             <I d={IC.dash} s={14}/>Dashboard
           </button>
-          <div className="nav-section">Setores</div>
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 5, marginBottom: 12 }}>
-            {SETORES.map(s => {
-              const ativo = setorAtivo === s.id;
-              return (
-                <button key={s.id} onClick={() => { setSetorAtivo(s.id); const primeiroOk = s.itens.find(i => i.always || i.perm) || s.itens[0]; if (primeiroOk) setPage(primeiroOk.id); }}
-                  style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 10.5, fontWeight: 700, padding: "6px 9px", borderRadius: 7, cursor: "pointer", border: ativo ? "1px solid var(--green)" : "1px solid var(--border)", background: ativo ? "var(--green-dim)" : "var(--bg3)", color: ativo ? "var(--green)" : "var(--text2)" }}>
-                  <I d={s.icon} s={11}/>{s.label}
-                </button>
-              );
-            })}
-          </div>
           <div className="nav-section">{SETORES.find(s => s.id === setorAtivo)?.label}</div>
           {(SETORES.find(s => s.id === setorAtivo)?.itens || []).map(item => {
             const ok = item.always || item.perm;
@@ -974,6 +962,17 @@ function SistemaEmpresa({ user, onLogout }) {
           </div>
           <div style={{ fontSize: 11, color: "var(--green)", background: "var(--green-dim)", padding: "4px 12px", borderRadius: 20, fontWeight: 600 }}>🟢 Online</div>
         </header>
+        <div className="no-print" style={{ display: "flex", gap: 8, padding: "10px 24px", borderBottom: "1px solid var(--border)", background: "var(--bg2)", flexWrap: "wrap" }}>
+          {SETORES.map(s => {
+            const ativo = setorAtivo === s.id;
+            return (
+              <button key={s.id} onClick={() => { setSetorAtivo(s.id); const primeiroOk = s.itens.find(i => i.always || i.perm) || s.itens[0]; if (primeiroOk) setPage(primeiroOk.id); }}
+                style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, fontWeight: 700, padding: "7px 14px", borderRadius: 8, cursor: "pointer", border: ativo ? "1px solid var(--green)" : "1px solid var(--border)", background: ativo ? "var(--green-dim)" : "var(--bg3)", color: ativo ? "var(--green)" : "var(--text2)" }}>
+                <I d={s.icon} s={13}/>{s.label}
+              </button>
+            );
+          })}
+        </div>
         <main className="content">
           {loading ? <div style={{ textAlign: "center", padding: 60, color: "var(--text2)" }}>Carregando...</div> : (
             <>
