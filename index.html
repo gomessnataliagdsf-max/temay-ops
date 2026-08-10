@@ -867,6 +867,7 @@ function SistemaEmpresa({ user, onLogout }) {
     ]},
     { id: "dp", label: "Departamento Pessoal", icon: IC.contract, itens: [
       { id: "contratacao", label: "Contratação", always: true, icon: IC.contract, badge: contratados.length },
+      { id: "aniversariantes", label: "Aniversariantes", always: true, icon: IC.cal },
       { id: "solicitacoes", label: "Solicitações", perm: podeCriarUsuarios, icon: IC.solicit, badge: (() => { try { return parseInt(localStorage.getItem(`sol_badge_${empId}`) || "0"); } catch(e){ return 0; } })() },
     ]},
     { id: "controles", label: "Controles", icon: IC.card, itens: [
@@ -968,7 +969,7 @@ function SistemaEmpresa({ user, onLogout }) {
       <div className="main">
         <header className="topbar">
           <div className="topbar-title" style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            {{ dashboard: "Dashboard", candidatos: "Candidatos", vagas: "Vagas", agenda: "Agenda", pipeline: "Pipeline", contratacao: "Contratação", solicitacoes: "Solicitações", usuarios: "Usuários", origens: "Origens", financeiro: "Cartão Corporativo", uniformes: "Uniformes" }[page] || page}
+            {{ dashboard: "Dashboard", candidatos: "Candidatos", vagas: "Vagas", agenda: "Agenda", pipeline: "Pipeline", contratacao: "Contratação", aniversariantes: "Aniversariantes", solicitacoes: "Solicitações", usuarios: "Usuários", origens: "Origens", financeiro: "Cartão Corporativo", uniformes: "Uniformes" }[page] || page}
             {minhasEmpresas.length > 0 && <span style={{ fontSize: 10, fontWeight: 600, color: "var(--text3)", background: "var(--bg3)", border: "1px solid var(--border)", borderRadius: 20, padding: "2px 8px" }}>{empresaAtivaObj?.nome}</span>}
           </div>
           <div style={{ fontSize: 11, color: "var(--green)", background: "var(--green-dim)", padding: "4px 12px", borderRadius: 20, fontWeight: 600 }}>🟢 Online</div>
@@ -985,13 +986,14 @@ function SistemaEmpresa({ user, onLogout }) {
                 ];
                 const _corMap = {};
                 _todasEtapas.forEach(e => { _corMap[e.nome] = e.cor; });
-                return <DashboardEmp data={{ ...data, candidatos: meusCandidatos, vagas: minhasVagas }} origens={origens} corPorStatus={_corMap} todasEtapas={_todasEtapas}/>;
+                return <DashboardEmp data={{ ...data, candidatos: meusCandidatos, vagas: minhasVagas }} origens={origens} corPorStatus={_corMap} todasEtapas={_todasEtapas} empresaId={empId} podeVerFinanceiro={podeVerFinanceiro}/>;
               })()}
               {page === "candidatos" && <CandidatosEmp data={{ ...data, candidatos: meusCandidatos, vagas: minhasVagas }} setData={setData} user={user} empresaId={empId} origens={origens} podeVerTudo={podeVerTudo}/>}
               {page === "vagas" && (podeEditarVagas ? <VagasEmp data={{ ...data, vagas: minhasVagas }} setData={setData} empresaId={empId} user={user}/> : <AccessDenied/>)}
               {page === "agenda" && <AgendaEmp data={{ ...data, candidatos: meusCandidatos }}/>}
               {page === "pipeline" && <PipelineEmp data={{ ...data, candidatos: meusCandidatos }} setData={setData} empresaId={empId} allUsuarios={allUsuarios} allEmpresas={allEmpresas} onEtapasChange={setEtapasCustom}/>}
               {page === "contratacao" && <ContratacaoEmp data={data} setData={setData} empresaId={empId} user={user}/>}
+              {page === "aniversariantes" && <AniversariantesEmp data={data} empresaId={empId}/>}
               {page === "uniformes" && <UniformesEmp data={data} empresaId={empId} user={user}/>}
               {page === "financeiro" && (podeVerFinanceiro ? <CartaoCorporativoEmp empresaId={empId} user={user}/> : <AccessDenied/>)}
               {page === "solicitacoes" && (podeCriarUsuarios ? <SolicitacoesRH empresaId={empId} user={user} setData={setData} data={data}/> : <AccessDenied/>)}
@@ -1009,7 +1011,8 @@ function SistemaEmpresa({ user, onLogout }) {
 // ============================================================
 // DASHBOARD
 // ============================================================
-function DashboardEmp({ data, origens, corPorStatus, todasEtapas }) {
+function DashboardEmp({ data, origens, corPorStatus, todasEtapas, empresaId, podeVerFinanceiro }) {
+  const [setorDash, setSetorDash] = React.useState("recrutamento");
   const _cores = corPorStatus || {"Novo":"#9ea3ad","Em Entrevista":"#faa61a","Aprovado":"#9f7aea","Reprovado":"#f04747","Contratado":"#5865f2","Desistente":"#9b84ec"};
   const _etapas = todasEtapas || [{nome:"Novo",cor:"#9ea3ad"},{nome:"Em Entrevista",cor:"#faa61a"},{nome:"Aprovado",cor:"#9f7aea"},{nome:"Reprovado",cor:"#f04747"},{nome:"Contratado",cor:"#5865f2"},{nome:"Desistente",cor:"#9b84ec"}];
   const [f1, setF1] = React.useState("");
@@ -1317,6 +1320,19 @@ function DashboardEmp({ data, origens, corPorStatus, todasEtapas }) {
   const maxF = Math.max(...funil.map(f => f.count), 1);
 
   return (
+    <div>
+      <div style={{ display: "flex", gap: 6, marginBottom: 16, flexWrap: "wrap" }}>
+        {[
+          { id: "recrutamento", label: "Recrutamento e Seleção" },
+          { id: "dp", label: "Departamento Pessoal" },
+          { id: "controles", label: "Controles" },
+        ].map(s => (
+          <button key={s.id} onClick={() => setSetorDash(s.id)} style={{ fontSize: 12, fontWeight: 700, padding: "7px 16px", borderRadius: 8, cursor: "pointer", border: setorDash === s.id ? "1px solid var(--green)" : "1px solid var(--border)", background: setorDash === s.id ? "var(--green-dim)" : "var(--bg3)", color: setorDash === s.id ? "var(--green)" : "var(--text2)" }}>{s.label}</button>
+        ))}
+      </div>
+      {setorDash === "dp" && <DashboardDP empresaId={empresaId} data={data}/>}
+      {setorDash === "controles" && <DashboardControles empresaId={empresaId} podeVerFinanceiro={podeVerFinanceiro}/>}
+      {setorDash === "recrutamento" && (
     <>
       {/* FILTROS */}
       <div className="filter-section">
@@ -1464,12 +1480,103 @@ function DashboardEmp({ data, origens, corPorStatus, todasEtapas }) {
         </div>
       </div>
     </>
+      )}
+    </div>
   );
 }
 
 // ============================================================
-// FORM CANDIDATO
+// DASHBOARD — Departamento Pessoal
 // ============================================================
+function DashboardDP({ empresaId, data }) {
+  const [extra, setExtra] = React.useState([]);
+  const [carregando, setCarregando] = React.useState(true);
+
+  React.useEffect(() => {
+    setCarregando(true);
+    contratacoesService.listarPorEmpresa(empresaId).then(l => { setExtra(l); setCarregando(false); });
+  }, [empresaId]);
+
+  const contratados = (data?.candidatos || []).filter(c => c.status === "Contratado");
+  const mesAtual = new Date().getMonth();
+  const aniversariantesMes = extra.filter(e => e.data_nascimento && new Date(e.data_nascimento + "T00:00:00").getMonth() === mesAtual).length;
+  const paisMaes = extra.filter(e => (e.dependentes || []).some(d => d.parentesco === "Filho(a)")).length;
+  const afastamentosAtivos = extra.filter(e => e.afastamento_tipo || e.data_afastamento).length;
+  const totalAdvertencias = extra.reduce((s, e) => s + ((e.advertencias || []).length), 0);
+  const feriasVencendo = extra.filter(e => {
+    if (!e.data_inicio) return false;
+    const c = calcularFerias(e.data_inicio, e.ferias_periodos || []);
+    if (!c || !c.dataLimite) return false;
+    const dias = (new Date(c.dataLimite) - new Date()) / 86400000;
+    return dias <= 60;
+  }).length;
+
+  const Card = ({ label, valor, cor, icone }) => (
+    <div className="card" style={{ padding: 16 }}>
+      <div style={{ fontSize: 9, color: "var(--text3)", fontWeight: 700, textTransform: "uppercase", marginBottom: 6 }}>{icone} {label}</div>
+      <div style={{ fontSize: 24, fontWeight: 800, color: cor || "var(--text)" }}>{carregando ? "..." : valor}</div>
+    </div>
+  );
+
+  return (
+    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(200px,1fr))", gap: 14 }}>
+      <Card label="Colaboradores Ativos" valor={contratados.length} icone="👥"/>
+      <Card label="Aniversariantes do Mês" valor={aniversariantesMes} icone="🎂" cor="#faa61a"/>
+      <Card label="Pais e Mães" valor={paisMaes} icone="👨‍👩‍👧" cor="#9f7aea"/>
+      <Card label="Afastamentos Ativos" valor={afastamentosAtivos} icone="🏥" cor={afastamentosAtivos > 0 ? "#f04747" : "var(--text)"}/>
+      <Card label="Advertências (total)" valor={totalAdvertencias} icone="⚠️" cor={totalAdvertencias > 0 ? "#f04747" : "var(--text)"}/>
+      <Card label="Férias Vencendo (60d)" valor={feriasVencendo} icone="🏖️" cor={feriasVencendo > 0 ? "#f04747" : "var(--green)"}/>
+    </div>
+  );
+}
+
+// ============================================================
+// DASHBOARD — Controles
+// ============================================================
+function DashboardControles({ empresaId, podeVerFinanceiro }) {
+  const [cartaoLista, setCartaoLista] = React.useState([]);
+  const [limite, setLimite] = React.useState(null);
+  const [estoque, setEstoque] = React.useState([]);
+  const [carregando, setCarregando] = React.useState(true);
+
+  React.useEffect(() => {
+    setCarregando(true);
+    const promessas = [uniformesService.listarEstoque(empresaId)];
+    if (podeVerFinanceiro) { promessas.push(cartaoService.listarPorEmpresa(empresaId), cartaoService.obterConfig(empresaId)); }
+    Promise.all(promessas).then((res) => {
+      setEstoque(res[0]);
+      if (podeVerFinanceiro) { setCartaoLista(res[1] || []); setLimite(res[2] ? parseFloat(res[2].limite) : 0); }
+      setCarregando(false);
+    });
+  }, [empresaId, podeVerFinanceiro]);
+
+  const totalGasto = cartaoLista.reduce((s, l) => s + (parseFloat(l.valor) || 0), 0);
+  const saldo = limite !== null ? limite - totalGasto : null;
+  const fmtMoeda = v => (v || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+  const estoqueBaixo = estoque.filter(e => e.quantidade <= 3).length;
+  const totalPecas = estoque.reduce((s, e) => s + (e.quantidade || 0), 0);
+
+  const Card = ({ label, valor, cor, icone }) => (
+    <div className="card" style={{ padding: 16 }}>
+      <div style={{ fontSize: 9, color: "var(--text3)", fontWeight: 700, textTransform: "uppercase", marginBottom: 6 }}>{icone} {label}</div>
+      <div style={{ fontSize: 24, fontWeight: 800, color: cor || "var(--text)" }}>{carregando ? "..." : valor}</div>
+    </div>
+  );
+
+  return (
+    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(200px,1fr))", gap: 14 }}>
+      {podeVerFinanceiro && (<>
+        <Card label="Limite do Cartão" valor={fmtMoeda(limite)} icone="💳"/>
+        <Card label="Total Gasto" valor={fmtMoeda(totalGasto)} icone="💸" cor="#f04747"/>
+        <Card label="Saldo Restante" valor={fmtMoeda(saldo)} icone="✅" cor={saldo >= 0 ? "var(--green)" : "#f04747"}/>
+      </>)}
+      <Card label="Peças em Estoque" valor={totalPecas} icone="👕"/>
+      <Card label="Itens com Estoque Baixo" valor={estoqueBaixo} icone="⚠️" cor={estoqueBaixo > 0 ? "#f04747" : "var(--green)"}/>
+    </div>
+  );
+}
+
+
 function FormCandidato({ candidato, vagas, candidatos, origens, onSalvar, onFechar }) {
   const { todosStatus: _etapasForm } = React.useContext(EtapasContext);
   const _statusForm = _etapasForm.length > 0 ? _etapasForm : STATUS_OPTS;
@@ -1598,6 +1705,7 @@ function CandidatosEmp({ data, setData, user, empresaId, origens, podeVerTudo })
   const [busca, setBusca] = React.useState(""); const [fTel, setFTel] = React.useState("");
   const [fStatus, setFStatus] = React.useState("Todos"); const [fOrigem, setFOrigem] = React.useState("Todas"); const [fVaga, setFVaga] = React.useState("Todas");
   const [fRec, setFRec] = React.useState("Todos");
+  const [fDataIni, setFDataIni] = React.useState(""); const [fDataFim, setFDataFim] = React.useState("");
   const [modalDesistencia, setModalDesistencia] = React.useState(null); // candidato pendente
   const [motivoDesistencia, setMotivoDesistencia] = React.useState("");
   const recrutadores = [...new Set(data.candidatos.map(c => c.recrutador).filter(Boolean))];
@@ -1610,11 +1718,12 @@ function CandidatosEmp({ data, setData, user, empresaId, origens, podeVerTudo })
     const oOk = fOrigem === "Todas" || (c.origem_contato || c.origem) === fOrigem;
     const vOk = fVaga === "Todas" || c.vaga === fVaga;
     const rOk = fRec === "Todos" || c.recrutador === fRec;
-    return bOk && tOk && sOk && oOk && vOk && rOk;
+    const dOk = (!fDataIni || (c.data && c.data >= fDataIni)) && (!fDataFim || (c.data && c.data <= fDataFim));
+    return bOk && tOk && sOk && oOk && vOk && rOk && dOk;
   });
   const vagasU = [...new Set(data.candidatos.map(c => c.vaga).filter(Boolean))];
-  const temF = busca || fTel || fStatus !== "Todos" || fOrigem !== "Todas" || fVaga !== "Todas" || fRec !== "Todos";
-  const limpar = () => { setBusca(""); setFTel(""); setFStatus("Todos"); setFOrigem("Todas"); setFVaga("Todas"); setFRec("Todos"); };
+  const temF = busca || fTel || fStatus !== "Todos" || fOrigem !== "Todas" || fVaga !== "Todas" || fRec !== "Todos" || fDataIni || fDataFim;
+  const limpar = () => { setBusca(""); setFTel(""); setFStatus("Todos"); setFOrigem("Todas"); setFVaga("Todas"); setFRec("Todos"); setFDataIni(""); setFDataFim(""); };
 
   const salvar = async (form, curriculoOuMotivo, motivo_desistencia_extra) => {
     // curriculoOuMotivo pode ser objeto {url, nome} vindo do FormCandidato, ou string de motivo
@@ -1719,6 +1828,12 @@ function CandidatosEmp({ data, setData, user, empresaId, origens, podeVerTudo })
           <select className="filter-select" value={fOrigem} onChange={e => setFOrigem(e.target.value)}><option value="Todas">Todas Origens</option>{nomesOrigens.map(o => <option key={o}>{o}</option>)}</select>
           <select className="filter-select" value={fVaga} onChange={e => setFVaga(e.target.value)}><option value="Todas">Todas Vagas</option>{vagasU.map(v => <option key={v}>{v}</option>)}</select>
           {podeVerTudo && <select className="filter-select" value={fRec} onChange={e => setFRec(e.target.value)}><option value="Todos">Todos Recrutadores</option>{recrutadores.map(r => <option key={r}>{r}</option>)}</select>}
+          <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
+            <span style={{ fontSize: 11, color: "var(--text3)" }}>Cadastro:</span>
+            <input type="date" className="filter-input" style={{ maxWidth: 135 }} value={fDataIni} onChange={e => setFDataIni(e.target.value)}/>
+            <span style={{ fontSize: 11, color: "var(--text3)" }}>até</span>
+            <input type="date" className="filter-input" style={{ maxWidth: 135 }} value={fDataFim} onChange={e => setFDataFim(e.target.value)}/>
+          </div>
           {temF && <button className="btn-clear" onClick={limpar}>✕</button>}
         </div>
       </div>
@@ -2267,7 +2382,7 @@ const CATEGORIAS_CARTAO = ["Alimentação", "Transporte/Combustível", "Material
 // UNIFORMES
 // ============================================================
 const TIPOS_UNIFORME = ["Camiseta", "Blusa de Frio"];
-const TAMANHOS_UNIFORME = ["PP", "P", "M", "G", "GG", "XG"];
+const TAMANHOS_UNIFORME = ["PP", "P", "M", "G", "GG", "XG", "XXG", "G1", "G2", "G3"];
 
 function UniformesEmp({ data, empresaId, user }) {
   const [subTab, setSubTab] = React.useState("estoque");
@@ -2615,6 +2730,88 @@ function CartaoCorporativoEmp({ empresaId, user }) {
               <button className="no-print" onClick={() => remover(l.id)} style={{ fontSize: 11, color: "#f04747", background: "rgba(240,71,71,0.1)", border: "1px solid rgba(240,71,71,0.2)", borderRadius: 6, padding: "4px 9px", cursor: "pointer" }}>Remover</button>
             </div>
           ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ============================================================
+// ANIVERSARIANTES
+// ============================================================
+const MESES_NOMES = ["Janeiro","Fevereiro","Março","Abril","Maio","Junho","Julho","Agosto","Setembro","Outubro","Novembro","Dezembro"];
+
+function AniversariantesEmp({ data, empresaId }) {
+  const [infoExtra, setInfoExtra] = React.useState({});
+  const [carregando, setCarregando] = React.useState(true);
+  const [mesFiltro, setMesFiltro] = React.useState(new Date().getMonth());
+
+  React.useEffect(() => {
+    setCarregando(true);
+    contratacoesService.listarPorEmpresa(empresaId).then(lista => {
+      const map = {};
+      lista.forEach(r => { if (r.candidato_id) map[r.candidato_id] = r; });
+      setInfoExtra(map);
+      setCarregando(false);
+    });
+  }, [empresaId]);
+
+  const contratados = (data?.candidatos || []).filter(c => c.status === "Contratado");
+
+  const aniversariantes = contratados
+    .map(c => ({ c, extra: infoExtra[c.id] }))
+    .filter(({ extra }) => {
+      if (!extra?.data_nascimento) return false;
+      const d = new Date(extra.data_nascimento + "T00:00:00");
+      return !isNaN(d.getTime()) && d.getMonth() === parseInt(mesFiltro);
+    })
+    .sort((a, b) => new Date(a.extra.data_nascimento + "T00:00:00").getDate() - new Date(b.extra.data_nascimento + "T00:00:00").getDate());
+
+  const calcIdade = (dataNasc, mesRef) => {
+    const nasc = new Date(dataNasc + "T00:00:00");
+    const anoRef = new Date().getFullYear();
+    return anoRef - nasc.getFullYear();
+  };
+
+  return (
+    <div>
+      <div className="page-header">
+        <div><div className="page-title">🎂 Aniversariantes</div><div className="page-subtitle">{aniversariantes.length} aniversariante(s) em {MESES_NOMES[mesFiltro]}</div></div>
+      </div>
+
+      <div className="filter-section">
+        <div className="filter-row" style={{ alignItems: "center" }}>
+          <label style={{ fontSize: 12, color: "var(--text2)" }}>Mês:</label>
+          <select className="filter-select" value={mesFiltro} onChange={e => setMesFiltro(parseInt(e.target.value))}>
+            {MESES_NOMES.map((m, i) => <option key={m} value={i}>{m}</option>)}
+          </select>
+        </div>
+      </div>
+
+      {carregando ? (
+        <div style={{ textAlign: "center", padding: 40, color: "var(--text2)" }}>Carregando...</div>
+      ) : aniversariantes.length === 0 ? (
+        <div className="empty-state card"><div style={{ fontSize: 40, marginBottom: 10 }}>🎂</div><div style={{ fontFamily: "var(--font-head)", fontWeight: 700, fontSize: 14 }}>Nenhum aniversariante em {MESES_NOMES[mesFiltro]}</div></div>
+      ) : (
+        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          {aniversariantes.map(({ c, extra }) => {
+            const d = new Date(extra.data_nascimento + "T00:00:00");
+            return (
+              <div key={c.id} className="card" style={{ display: "flex", alignItems: "center", gap: 14, padding: 14 }}>
+                <div style={{ width: 42, height: 42, borderRadius: "50%", background: "linear-gradient(135deg,#faa61a,#f04747)", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 800, fontSize: 16, flexShrink: 0 }}>{ini(c.nome)}</div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontWeight: 700, fontSize: 14 }}>{c.nome}</div>
+                  <div style={{ fontSize: 12, color: "var(--text3)" }}>{c.vaga || ""}{extra.sexo ? ` · ${extra.sexo}` : ""} · completa {calcIdade(extra.data_nascimento, mesFiltro)} anos</div>
+                </div>
+                {c.telefone && (
+                  <a href={`https://wa.me/55${c.telefone.replace(/\D/g,"")}`} target="_blank" rel="noopener noreferrer" title="Parabenizar no WhatsApp" style={{ display: "flex", alignItems: "center", color: "#25D366", textDecoration: "none", flexShrink: 0 }}>
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="#25D366"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
+                  </a>
+                )}
+                <div style={{ fontSize: 20, fontWeight: 800, color: "var(--blue)", width: 54, textAlign: "right" }}>{d.getDate().toString().padStart(2,"0")}/{(d.getMonth()+1).toString().padStart(2,"0")}</div>
+              </div>
+            );
+          })}
         </div>
       )}
     </div>
