@@ -1931,13 +1931,15 @@ function CandidatosEmp({ data, setData, user, empresaId, origens, podeVerTudo })
 // ============================================================
 function VagasEmp({ data, setData, empresaId }) {
   const [modal, setModal] = React.useState(false); const [editando, setEditando] = React.useState(null); const [confirmDel, setConfirmDel] = React.useState(null);
-  const FINIT = { titulo: "", departamento: "", tipo: "CLT", salario: "", prioridade: "Média", status: "Aberta", vagas_abertas: 1, recrutador: "", observacoes: "", data_abertura: new Date().toISOString().split("T")[0], motivo_abertura: "Aumento de Quadro" };
+  const FINIT = { titulo: "", departamento: "", tipo: "CLT", salario: "", prioridade: "Média", status: "Aberta", vagas_abertas: 1, recrutador: "", observacoes: "", data_abertura: new Date().toISOString().split("T")[0], data_fechamento: "", motivo_abertura: "Aumento de Quadro" };
   const [form, setForm] = React.useState(FINIT);
   const prioColor = { Alta: "var(--red)", Média: "var(--yellow)", Baixa: "var(--green)" };
-  const abrirEditar = v => { setEditando(v.id); setForm({ titulo: v.titulo || "", departamento: v.departamento || "", tipo: v.tipo || "CLT", salario: v.salario || "", prioridade: v.prioridade || "Média", status: v.status || "Aberta", vagas_abertas: v.vagas_abertas || 1, recrutador: v.recrutador || "", observacoes: v.observacoes || "", data_abertura: v.data_abertura || "", motivo_abertura: v.motivo_abertura || "" }); setModal(true); };
+  const diffDias = (d1, d2) => Math.max(0, Math.floor((new Date(d2) - new Date(d1)) / 86400000));
+  const abrirEditar = v => { setEditando(v.id); setForm({ titulo: v.titulo || "", departamento: v.departamento || "", tipo: v.tipo || "CLT", salario: v.salario || "", prioridade: v.prioridade || "Média", status: v.status || "Aberta", vagas_abertas: v.vagas_abertas || 1, recrutador: v.recrutador || "", observacoes: v.observacoes || "", data_abertura: v.data_abertura || "", data_fechamento: v.data_fechamento || "", motivo_abertura: v.motivo_abertura || "" }); setModal(true); };
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
   const salvar = async () => {
-    const item = { titulo: form.titulo, departamento: form.departamento, tipo: form.tipo, salario: form.salario, status: form.status, prioridade: form.prioridade, recrutador: form.recrutador, vagas_abertas: parseInt(form.vagas_abertas) || 1, observacoes: form.observacoes, data_abertura: form.data_abertura || null, motivo_abertura: form.motivo_abertura, candidatos_count: 0, empresa_id: empresaId };
+    const dataFechamento = form.status === "Encerrada" ? (form.data_fechamento || new Date().toISOString().split("T")[0]) : null;
+    const item = { titulo: form.titulo, departamento: form.departamento, tipo: form.tipo, salario: form.salario, status: form.status, prioridade: form.prioridade, recrutador: form.recrutador, vagas_abertas: parseInt(form.vagas_abertas) || 1, observacoes: form.observacoes, data_abertura: form.data_abertura || null, data_fechamento: dataFechamento, motivo_abertura: form.motivo_abertura, candidatos_count: 0, empresa_id: empresaId };
     if (editando) {
       await db.patch("vagas", editando, item);
       setData(d => ({ ...d, vagas: d.vagas.map(v => v.id === editando ? { ...v, ...item } : v) }));
@@ -1962,6 +1964,15 @@ function VagasEmp({ data, setData, empresaId }) {
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 8 }}><span style={{ fontSize: 11, color: "var(--text2)" }}>{v.tipo}</span><span style={{ fontSize: 11, color: prioColor[v.prioridade], fontWeight: 600 }}>{v.prioridade}</span>{v.recrutador && <span style={{ fontSize: 11, color: "var(--text2)" }}>· {v.recrutador}</span>}</div>
             {v.salario && <div style={{ fontSize: 13, fontWeight: 700, color: "var(--green)", marginTop: 8 }}>{v.salario}</div>}
             {v.motivo_abertura && <div style={{ fontSize: 10, color: "var(--text3)", marginTop: 4, display: "flex", alignItems: "center", gap: 4 }}><span>📌</span>{v.motivo_abertura}</div>}
+            {v.data_abertura && (
+              v.status === "Encerrada" ? (
+                v.data_fechamento
+                  ? <div style={{ fontSize: 10, color: "var(--green)", marginTop: 4, display: "flex", alignItems: "center", gap: 4 }}><span>✅</span>Fechada em {diffDias(v.data_abertura, v.data_fechamento)} dia{diffDias(v.data_abertura, v.data_fechamento) !== 1 ? "s" : ""} ({fmtData(v.data_fechamento)})</div>
+                  : <div style={{ fontSize: 10, color: "var(--text3)", marginTop: 4, display: "flex", alignItems: "center", gap: 4 }}><span>✅</span>Encerrada</div>
+              ) : (
+                <div style={{ fontSize: 10, color: diffDias(v.data_abertura, new Date().toISOString().split("T")[0]) > 30 ? "#f04747" : "var(--text3)", marginTop: 4, display: "flex", alignItems: "center", gap: 4 }}><span>🕒</span>{diffDias(v.data_abertura, new Date().toISOString().split("T")[0])} dia{diffDias(v.data_abertura, new Date().toISOString().split("T")[0]) !== 1 ? "s" : ""} em aberto</div>
+              )
+            )}
             <div style={{ display: "flex", gap: 8, marginTop: 12 }}><button className="btn btn-ghost btn-sm" onClick={() => abrirEditar(v)} style={{ flex: 1, justifyContent: "center" }}><I d={IC.edit} s={12}/>Editar</button><button className="btn btn-danger btn-sm" onClick={() => setConfirmDel(v)}><I d={IC.trash} s={12}/></button></div>
           </div>
         ))}
