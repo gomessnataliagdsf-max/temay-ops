@@ -303,15 +303,138 @@ const origensService = {
   }
 };
 
+const empresasInfoService = {
+  buscarPorId: async (id) => {
+    try {
+      const r = await fetch(`${SB_URL}/rest/v1/empresas?id=eq.${id}&select=*`, {
+        headers: { "apikey": SB_KEY, "Authorization": `Bearer ${SB_KEY}` }
+      });
+      const data = await r.json();
+      return Array.isArray(data) && data.length > 0 ? data[0] : null;
+    } catch (e) { console.error("[empresasInfo.buscarPorId]", e); return null; }
+  },
+};
+
 // ============================================================
-// SERVICE: CONTRATAÇÕES
+// MODELOS DE DOCUMENTO — assinatura digital
 // ============================================================
-// ============================================================
-// CARTÃO CORPORATIVO
-// ============================================================
-// ============================================================
-// UNIFORMES — estoque e entregas
-// ============================================================
+const MESES_EXTENSO = ["janeiro","fevereiro","março","abril","maio","junho","julho","agosto","setembro","outubro","novembro","dezembro"];
+const dataExtenso = (d) => { const dt = d ? new Date(d + "T00:00:00") : new Date(); return `${dt.getDate()} de ${MESES_EXTENSO[dt.getMonth()]} de ${dt.getFullYear()}`; };
+const enderecoCompleto = (e) => [e.logradouro, e.numero, e.complemento, e.bairro, e.cidade && e.uf ? `${e.cidade}/${e.uf}` : (e.cidade || "")].filter(Boolean).join(", ");
+const enderecoColab = (c) => [c.endereco, c.numero, c.complemento, c.bairro, c.cidade && c.estado ? `${c.cidade}/${c.estado}` : (c.cidade || "")].filter(Boolean).join(", ");
+
+const TEMPLATES_DOCUMENTOS = {
+  "Recibo de Entrega de Uniforme": {
+    titulo: "RECIBO DE ENTREGA DE UNIFORME",
+    campos: [{ key: "itens_uniforme", label: "Itens Entregues", type: "textarea", placeholder: "Ex: 2 Camisetas Tam M\n1 Blusa de Frio Tam G" }],
+    gerar: (colab, emp, extras) => ([
+      `Eu, ${colab.nome}, RG ${colab.rg || "__________"} e CPF ${colab.cpf || "__________"}, declaro ter recebido da empresa ${emp.razao_social || emp.nome}, devidamente inscrita no CNPJ ${emp.cnpj || "__________"}, com endereço ${enderecoCompleto(emp) || "__________"}, o(s) uniforme(s) abaixo discriminado(s), me comprometendo a utilizá-los somente para fins laborais durante toda a jornada de trabalho e devolvê-los no término do contrato de trabalho, sob pena de, não o fazendo, ser enquadrado em punições disciplinares:`,
+      "ITENS_BOX:" + (extras.itens_uniforme || "(nenhum item informado)"),
+      `Ao término da prestação de serviço ou do contrato individual de trabalho, o COLABORADOR compromete-se a devolver o UNIFORME. A não devolução do uniforme fica sujeita ao valor de R$ 60,00 por unidade, a ser descontado em verbas rescisórias.`,
+      `${emp.cidade || "Guarulhos"}, ${dataExtenso()}`,
+    ])
+  },
+  "Autorização de Desconto - Seguro de Vida": {
+    titulo: "AUTORIZAÇÃO DE DESCONTO EM FOLHA — SEGURO DE VIDA",
+    campos: [
+      { key: "matricula", label: "Matrícula (opcional)", type: "text", placeholder: "Caso tenha" },
+      { key: "valor", label: "Valor do Desconto (R$)", type: "text", placeholder: "2,50" },
+      { key: "data_inicio_desconto", label: "Início do Desconto (competência)", type: "month" },
+    ],
+    gerar: (colab, emp, extras) => ([
+      `Eu, ${colab.nome}, inscrito(a) no CPF sob nº ${colab.cpf || "__________"}, portador(a) da CTPS nº ${colab.ctps_numero || "__________"}, empregado(a) da empresa ${emp.razao_social || emp.nome}${extras.matricula ? `, matriculado(a) sob nº ${extras.matricula}` : ""}, AUTORIZO, de livre e espontânea vontade, que sejam efetuados descontos mensais em minha folha de pagamento referentes ao seguro de vida em grupo, contratado pela empresa, no valor de R$ ${extras.valor || "2,50"}, ou conforme valor vigente e ajustado pela seguradora.`,
+      `Declaro estar ciente de que:`,
+      `1. A adesão ao seguro de vida é voluntária e a autorização ora concedida poderá ser revogada a qualquer tempo, mediante comunicação por escrito ao setor de Recursos Humanos.`,
+      `2. Os descontos autorizados terão início a partir da competência de ${extras.data_inicio_desconto ? (() => { const [a,m] = extras.data_inicio_desconto.split("-"); return `${MESES_EXTENSO[parseInt(m)-1]} de ${a}`; })() : "__________"} e permanecerão vigentes enquanto perdurar minha adesão ao seguro.`,
+      `3. Estou ciente das condições gerais da apólice disponibilizadas pela empresa/seguradora.`,
+      `Por ser a expressão da minha vontade, firmo a presente autorização.`,
+      `Local: ${emp.cidade || "Guarulhos"}-${emp.uf || "SP"}`,
+      `Data: ${dataExtenso()}`,
+    ])
+  },
+  "Termo de Confidencialidade e Multa": {
+    titulo: "TERMO DE CONFIDENCIALIDADE E SIGILO",
+    campos: [],
+    gerar: (colab, emp, extras) => ([
+      `Pelo presente Termo, ${colab.nome}, ${colab.is_estrangeiro ? "estrangeiro(a)" : "brasileiro(a)"}, ${colab.estado_civil || "____________"}, inscrito(a) no CPF nº ${colab.cpf || "__________"}, e no RG ${colab.rg || "__________"}, residente e domiciliado(a) em ${enderecoColab(colab) || "__________"}, CEP: ${colab.cep || "__________"}, doravante denominado(a) como PARTE CONTRATADA, se obriga a manter o mais absoluto sigilo com relação a toda e qualquer informação a que tiver acesso durante a execução de suas atividades em favor da empresa ${emp.razao_social || emp.nome}, nome fantasia ${emp.nome_fantasia || emp.nome}, pessoa jurídica de direito privado, inscrita no CNPJ sob ${emp.cnpj || "__________"}, com sede em ${enderecoCompleto(emp) || "__________"}, doravante denominada PARTE CONTRATANTE.`,
+      `Para tanto, a PARTE CONTRATADA declara e se compromete:`,
+      `a) a manter sigilo, tanto escrito como verbal, ou por qualquer outra forma, de todos os dados, seja da empresa, dos clientes ou dos funcionários, informações científicas e técnicas, sobre recebíveis ou contas a pagar, sobre todos os materiais obtidos com sua participação, podendo incluir, mas não se limitando a: dados, técnicas, modelos, fluxogramas, croquis, fotografias, programas de computador, discos, financeiro, recebíveis, pendrives, processos, projetos, dentre outros;`,
+      `b) a não revelar, reproduzir, utilizar ou dar conhecimento, em hipótese alguma, a terceiros, de dados seja da empresa, dos clientes ou dos funcionários, informações de dados, científicas ou materiais obtidos com sua participação, sobre recebíveis ou contas a pagar, sobre a possibilidade de proteção, nos órgãos especializados, dos resultados ou tecnologia envolvendo aquela informação e todos os demais assuntos internos da empresa;`,
+      `c) a não tomar qualquer medida com vistas a obter para si ou para terceiros os direitos de propriedade intelectual relativos às informações sigilosas a que tenha acesso pelos sistemas internos e externos da empresa, inclusive: e-mails corporativos, sistemas internos, bancos de dados, arquivos de mailings, plataformas de SMS e WhatsApp em massa, URA, campanhas de mídia, informações dos funcionários, acesso ao wi-fi da empresa, ferramentas como Office e Power BI, acesso à rede da empresa, dentre outros;`,
+      `d) que todos os documentos, inclusive as ideias para realização do planejamento estratégico e análises de dados da empresa, contendo dados e informações relativas a qualquer pesquisa, são de propriedade exclusiva da empresa ${emp.razao_social || emp.nome}, nome fantasia ${emp.nome_fantasia || emp.nome}.`,
+      `TITULO:CLÁUSULA PRIMEIRA – DO OBJETIVO`,
+      `Este termo de confidencialidade é firmado com o intuito de evitar a divulgação e utilização não autorizada das informações confidenciais (clientes, financeiro, recebíveis, funcionários, dados, dentre outros) a que a empresa ${emp.razao_social || emp.nome}, nome fantasia ${emp.nome_fantasia || emp.nome}, tenha acesso por ocasião da realização do planejamento estratégico e análises de dados da empresa.`,
+      `TITULO:CLÁUSULA SEGUNDA – DAS INFORMAÇÕES CONFIDENCIAIS E OUTROS CONCEITOS`,
+      `Para os fins deste acordo, serão consideradas confidenciais todas as informações transmitidas por meios escritos, eletrônicos, verbais ou quaisquer outros, e de qualquer natureza, incluindo, mas não se limitando a: know-how, técnicas, cópias, modelos, fluxogramas, croquis, fotografias, software, mídias, contratos, planos de negócios, propostas comerciais, processos, tabelas, projetos, nomes de clientes, de revendedor e distribuidor, resultados de pesquisas, invenções e ideias, funcionários, financeiros, comerciais, dentre outros.`,
+      `Parágrafo Primeiro: Serão ainda consideradas informações confidenciais todas aquelas que assim forem identificadas pela empresa, por meio de legendas ou quaisquer outras marcações, ou que, devido às circunstâncias da revelação ou à própria natureza da informação, devam ser consideradas confidenciais ou de propriedade desta.`,
+      `Parágrafo Segundo: Em caso de dúvida sobre a confidencialidade de determinada informação, a PARTE CONTRATADA deverá mantê-la em absoluto sigilo, até que a empresa se manifeste expressamente a respeito.`,
+      `TITULO:CLÁUSULA TERCEIRA – DO USO DAS INFORMAÇÕES CONFIDENCIAIS`,
+      `A PARTE CONTRATADA compromete-se a utilizar as informações confidenciais apenas no âmbito do desenvolvimento e da execução de suas atividades, sendo vedada tanto a sua divulgação a terceiros quanto qualquer outra utilização que não seja expressamente permitida pela empresa.`,
+      `Parágrafo Primeiro: A PARTE CONTRATADA deverá tratar as informações confidenciais da empresa com o mesmo zelo e cuidado com que trataria os seus próprios dados, e deverá mantê-las em local seguro, com acesso limitado apenas às pessoas autorizadas.`,
+      `Parágrafo Segundo: Em caso de qualquer falha na segurança das informações confidenciais, a PARTE CONTRATADA deverá comunicar imediatamente a empresa. A pronta comunicação não exclui, entretanto, sua responsabilização pelo defeito na proteção dos dados sigilosos.`,
+      `TITULO:CLÁUSULA QUARTA – DA REQUISIÇÃO JUDICIAL`,
+      `Não será considerada quebra de confidencialidade a divulgação de informações ordenadas pela legislação ou por autoridade judiciária ou administrativa competente.`,
+      `Parágrafo Único: Neste caso, a PARTE CONTRATADA deverá imediatamente comunicar a empresa, apresentando-lhe a legislação referente ou a devida intimação judicial ou administrativa, para que esta se sirva dos melhores recursos disponíveis para impedir a divulgação das informações reveladas.`,
+      `TITULO:CLÁUSULA QUINTA – DA QUEBRA DA CONFIDENCIALIDADE`,
+      `Caso a PARTE CONTRATADA viole as obrigações previstas neste termo, deverá indenizar e ressarcir a empresa pelas perdas, lucros cessantes, danos diretos e indiretos e quaisquer outros prejuízos patrimoniais ou morais que surjam em decorrência deste descumprimento.`,
+      `Parágrafo Único: Por ocasião de sua violação, o presente termo poderá ser imediatamente rescindido pela empresa, gerando à PARTE CONTRATADA a obrigação de pagamento de multa equivalente a 100 (cem) salários-mínimos, bem como a reparação de eventuais danos que a violação vier a ocasionar.`,
+      `TITULO:CLÁUSULA SEXTA – DA VIGÊNCIA`,
+      `O presente acordo possui caráter irrevogável e irretratável, e inicia-se a partir da data de sua assinatura. Ainda que as atividades não venham a ser executadas, o dever de confidencialidade persistirá.`,
+      `O presente Termo tem natureza irrevogável e irretratável, e o seu não cumprimento acarretará todos os efeitos de ordem penal, civil e administrativa contra seus transgressores. Para dirimir quaisquer dúvidas oriundas do presente Termo, fica eleito o foro da Comarca de Guarulhos, com renúncia expressa a qualquer outro, por mais privilegiado que seja.`,
+      `${emp.cidade || "Guarulhos"}, ${dataExtenso()}`,
+    ])
+  },
+};
+
+
+const documentosService = {
+  listarPorEmpresa: async (empresaId) => {
+    try {
+      const r = await fetch(`${SB_URL}/rest/v1/documentos_assinatura?empresa_id=eq.${empresaId}&select=*&order=criado_em.desc`, {
+        headers: { "apikey": SB_KEY, "Authorization": `Bearer ${SB_KEY}` }
+      });
+      const data = await r.json();
+      return Array.isArray(data) ? data : [];
+    } catch (e) { console.error("[documentos.listarPorEmpresa]", e); return []; }
+  },
+  buscarPorToken: async (token) => {
+    try {
+      const r = await fetch(`${SB_URL}/rest/v1/documentos_assinatura?token=eq.${token}&select=*`, {
+        headers: { "apikey": SB_KEY, "Authorization": `Bearer ${SB_KEY}` }
+      });
+      const data = await r.json();
+      return Array.isArray(data) && data.length > 0 ? data[0] : null;
+    } catch (e) { console.error("[documentos.buscarPorToken]", e); return null; }
+  },
+  criar: async (registro) => {
+    try {
+      const r = await fetch(`${SB_URL}/rest/v1/documentos_assinatura`, {
+        method: "POST",
+        headers: { "apikey": SB_KEY, "Authorization": `Bearer ${SB_KEY}`, "Content-Type": "application/json", "Prefer": "return=representation" },
+        body: JSON.stringify(registro)
+      });
+      const data = await r.json();
+      return { ok: r.ok, item: Array.isArray(data) ? data[0] : data };
+    } catch (e) { console.error("[documentos.criar]", e); return { ok: false }; }
+  },
+  marcarAssinado: async (id, { assinatura_url, pdf_url }) => {
+    try {
+      const r = await fetch(`${SB_URL}/rest/v1/documentos_assinatura?id=eq.${id}`, {
+        method: "PATCH",
+        headers: { "apikey": SB_KEY, "Authorization": `Bearer ${SB_KEY}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ status: "Assinado", assinatura_url, pdf_url, assinado_em: new Date().toISOString() })
+      });
+      return r.ok;
+    } catch (e) { console.error("[documentos.marcarAssinado]", e); return false; }
+  },
+  remover: async (id) => {
+    try {
+      await fetch(`${SB_URL}/rest/v1/documentos_assinatura?id=eq.${id}`, { method: "DELETE", headers: { "apikey": SB_KEY, "Authorization": `Bearer ${SB_KEY}` } });
+      return true;
+    } catch (e) { console.error("[documentos.remover]", e); return false; }
+  },
+};
+
 const uniformesService = {
   listarEstoque: async (empresaId) => {
     try {
@@ -868,6 +991,7 @@ function SistemaEmpresa({ user, onLogout }) {
     { id: "dp", label: "Departamento Pessoal", icon: IC.contract, itens: [
       { id: "contratacao", label: "Contratação", always: true, icon: IC.contract, badge: contratados.length },
       { id: "aniversariantes", label: "Aniversariantes", always: true, icon: IC.cal },
+      { id: "documentos", label: "Documentos", always: true, icon: IC.solicit },
       { id: "solicitacoes", label: "Solicitações", perm: podeCriarUsuarios, icon: IC.solicit, badge: (() => { try { return parseInt(localStorage.getItem(`sol_badge_${empId}`) || "0"); } catch(e){ return 0; } })() },
     ]},
     { id: "controles", label: "Controles", icon: IC.card, itens: [
@@ -957,7 +1081,7 @@ function SistemaEmpresa({ user, onLogout }) {
       <div className="main">
         <header className="topbar">
           <div className="topbar-title" style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            {{ dashboard: "Dashboard", candidatos: "Candidatos", vagas: "Vagas", agenda: "Agenda", pipeline: "Pipeline", contratacao: "Contratação", aniversariantes: "Aniversariantes", solicitacoes: "Solicitações", usuarios: "Usuários", origens: "Origens", financeiro: "Cartão Corporativo", uniformes: "Uniformes" }[page] || page}
+            {{ dashboard: "Dashboard", candidatos: "Candidatos", vagas: "Vagas", agenda: "Agenda", pipeline: "Pipeline", contratacao: "Contratação", aniversariantes: "Aniversariantes", documentos: "Documentos", solicitacoes: "Solicitações", usuarios: "Usuários", origens: "Origens", financeiro: "Cartão Corporativo", uniformes: "Uniformes" }[page] || page}
             {minhasEmpresas.length > 0 && <span style={{ fontSize: 10, fontWeight: 600, color: "var(--text3)", background: "var(--bg3)", border: "1px solid var(--border)", borderRadius: 20, padding: "2px 8px" }}>{empresaAtivaObj?.nome}</span>}
           </div>
           <div style={{ fontSize: 11, color: "var(--green)", background: "var(--green-dim)", padding: "4px 12px", borderRadius: 20, fontWeight: 600 }}>🟢 Online</div>
@@ -993,6 +1117,7 @@ function SistemaEmpresa({ user, onLogout }) {
               {page === "pipeline" && <PipelineEmp data={{ ...data, candidatos: meusCandidatos }} setData={setData} empresaId={empId} allUsuarios={allUsuarios} allEmpresas={allEmpresas} onEtapasChange={setEtapasCustom}/>}
               {page === "contratacao" && <ContratacaoEmp data={data} setData={setData} empresaId={empId} user={user}/>}
               {page === "aniversariantes" && <AniversariantesEmp data={data} empresaId={empId}/>}
+              {page === "documentos" && <DocumentosEmp data={data} empresaId={empId} user={user}/>}
               {page === "uniformes" && <UniformesEmp data={data} empresaId={empId} user={user}/>}
               {page === "financeiro" && (podeVerFinanceiro ? <CartaoCorporativoEmp empresaId={empId} user={user}/> : <AccessDenied/>)}
               {page === "solicitacoes" && (podeCriarUsuarios ? <SolicitacoesRH empresaId={empId} user={user} setData={setData} data={data}/> : <AccessDenied/>)}
@@ -2824,6 +2949,155 @@ function AniversariantesEmp({ data, empresaId }) {
           })}
         </div>
       )}
+    </div>
+  );
+}
+
+// ============================================================
+// DOCUMENTOS — envio para assinatura (tela do RH)
+// ============================================================
+function DocumentosEmp({ data, empresaId, user }) {
+  const [lista, setLista] = React.useState([]);
+  const [carregando, setCarregando] = React.useState(true);
+  const [modal, setModal] = React.useState(false);
+  const [linkGerado, setLinkGerado] = React.useState(null);
+  const base = { background: "var(--bg3)", border: "1px solid var(--border)", borderRadius: "var(--radius-sm)", color: "var(--text)", fontSize: 12, padding: "7px 9px", width: "100%", outline: "none" };
+
+  const carregar = React.useCallback(() => {
+    setCarregando(true);
+    documentosService.listarPorEmpresa(empresaId).then(l => { setLista(l); setCarregando(false); });
+  }, [empresaId]);
+  React.useEffect(() => { carregar(); }, [carregar]);
+
+  const contratados = (data?.candidatos || []).filter(c => c.status === "Contratado");
+
+  const NovoEnvioModal = () => {
+    const [colaboradorNome, setColaboradorNome] = React.useState("");
+    const [candidatoId, setCandidatoId] = React.useState("");
+    const [tipoDoc, setTipoDoc] = React.useState(Object.keys(TEMPLATES_DOCUMENTOS)[0]);
+    const [extras, setExtras] = React.useState({});
+    const [salvando, setSalvando] = React.useState(false);
+    const tpl = TEMPLATES_DOCUMENTOS[tipoDoc];
+
+    const selecionarColaborador = (nome) => {
+      setColaboradorNome(nome);
+      const match = contratados.find(c => c.nome === nome);
+      setCandidatoId(match ? String(match.id) : "");
+      if (match && tipoDoc === "Recibo de Entrega de Uniforme") {
+        uniformesService.listarEntregas(empresaId).then(entregas => {
+          const doColab = entregas.filter(e => e.colaborador_nome === nome).slice(0, 5);
+          if (doColab.length > 0) {
+            const texto = doColab.map(e => `${e.quantidade}x ${e.tipo} - Tam. ${e.tamanho}${e.cor ? " - " + e.cor : ""} (entregue em ${fmtData(e.data_entrega)})`).join("\n");
+            setExtras(ex => ({ ...ex, itens_uniforme: texto }));
+          }
+        });
+      }
+    };
+
+    const enviar = async () => {
+      if (!colaboradorNome) { alert("Selecione o colaborador."); return; }
+      setSalvando(true);
+      const token = (crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).slice(2));
+      const { ok } = await documentosService.criar({
+        empresa_id: empresaId, candidato_id: candidatoId || null, colaborador_nome: colaboradorNome,
+        tipo_documento: tipoDoc, dados_extras: extras, token, criado_por: user?.nome || user?.login || ""
+      });
+      setSalvando(false);
+      if (ok) {
+        const link = `${window.location.origin}${window.location.pathname}?assinar=${token}`;
+        const match = contratados.find(c => c.nome === colaboradorNome);
+        setLinkGerado({ link, telefone: match?.telefone || "" });
+        carregar();
+      } else { alert("Erro ao gerar o envio."); }
+    };
+
+    if (linkGerado) return (
+      <div className="modal-overlay" onClick={() => { setLinkGerado(null); setModal(false); }}>
+        <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 440 }}>
+          <div className="modal-header"><span className="modal-title">✅ Link Gerado</span><button className="modal-close" onClick={() => { setLinkGerado(null); setModal(false); }}>×</button></div>
+          <div style={{ padding: 20 }}>
+            <div style={{ fontSize: 12, color: "var(--text2)", marginBottom: 10 }}>Envie esse link pro colaborador assinar pelo celular:</div>
+            <div style={{ background: "var(--bg3)", border: "1px solid var(--border)", borderRadius: 8, padding: 10, fontSize: 11, wordBreak: "break-all", marginBottom: 14 }}>{linkGerado.link}</div>
+            <div style={{ display: "flex", gap: 8 }}>
+              <button onClick={() => { navigator.clipboard.writeText(linkGerado.link); alert("Link copiado!"); }} className="btn btn-ghost" style={{ flex: 1 }}>📋 Copiar Link</button>
+              {linkGerado.telefone && (
+                <a href={`https://wa.me/55${linkGerado.telefone.replace(/\D/g,"")}?text=${encodeURIComponent("Olá! Segue o link para assinatura digital do documento: " + linkGerado.link)}`} target="_blank" rel="noopener noreferrer" className="btn" style={{ flex: 1, background: "#25D366", color: "#fff", textAlign: "center", textDecoration: "none", display: "flex", alignItems: "center", justifyContent: "center", borderRadius: 8, fontWeight: 700, fontSize: 13 }}>
+                  Enviar por WhatsApp
+                </a>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+
+    return (
+      <div className="modal-overlay" onClick={() => setModal(false)}>
+        <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 480 }}>
+          <div className="modal-header"><span className="modal-title">📤 Novo Envio para Assinatura</span><button className="modal-close" onClick={() => setModal(false)}>×</button></div>
+          <div style={{ padding: 20, display: "flex", flexDirection: "column", gap: 12 }}>
+            <div>
+              <label className="form-label">Colaborador</label>
+              <input style={base} list="lista-colaboradores-doc" value={colaboradorNome} onChange={e => selecionarColaborador(e.target.value)} placeholder="Digite ou selecione"/>
+              <datalist id="lista-colaboradores-doc">{contratados.map(c => <option key={c.id} value={c.nome}/>)}</datalist>
+            </div>
+            <div>
+              <label className="form-label">Documento</label>
+              <select style={base} value={tipoDoc} onChange={e => { setTipoDoc(e.target.value); setExtras({}); }}>
+                {Object.keys(TEMPLATES_DOCUMENTOS).map(t => <option key={t} value={t}>{t}</option>)}
+              </select>
+            </div>
+            {tpl.campos.map(c => (
+              <div key={c.key}>
+                <label className="form-label">{c.label}</label>
+                {c.type === "textarea" ? (
+                  <textarea className="form-textarea" style={{ minHeight: 70 }} value={extras[c.key] || ""} onChange={e => setExtras(ex => ({ ...ex, [c.key]: e.target.value }))} placeholder={c.placeholder}/>
+                ) : (
+                  <input type={c.type} style={base} value={extras[c.key] || ""} onChange={e => setExtras(ex => ({ ...ex, [c.key]: e.target.value }))} placeholder={c.placeholder}/>
+                )}
+              </div>
+            ))}
+            <button onClick={enviar} disabled={salvando} className="btn btn-primary" style={{ marginTop: 6 }}>{salvando ? "Gerando..." : "Gerar Link de Assinatura"}</button>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  const statusCor = s => s === "Assinado" ? "var(--green)" : "#faa61a";
+
+  return (
+    <div>
+      <div className="page-header">
+        <div><div className="page-title">📝 Documentos</div><div className="page-subtitle">Envio e assinatura digital de documentos</div></div>
+        <button className="btn btn-primary" onClick={() => setModal(true)}>+ Novo Envio</button>
+      </div>
+
+      {carregando ? (
+        <div style={{ textAlign: "center", padding: 40, color: "var(--text2)" }}>Carregando...</div>
+      ) : lista.length === 0 ? (
+        <div className="empty-state card"><div style={{ fontSize: 40, marginBottom: 10 }}>📝</div><div style={{ fontFamily: "var(--font-head)", fontWeight: 700, fontSize: 14 }}>Nenhum documento enviado ainda</div></div>
+      ) : (
+        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          {lista.map(d => (
+            <div key={d.id} className="card" style={{ display: "flex", alignItems: "center", gap: 14, padding: 12 }}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontWeight: 700, fontSize: 13 }}>{d.colaborador_nome}</div>
+                <div style={{ fontSize: 11, color: "var(--text3)" }}>{d.tipo_documento} · enviado em {fmtData(d.criado_em?.slice(0,10))}{d.assinado_em ? ` · assinado em ${fmtData(d.assinado_em.slice(0,10))}` : ""}</div>
+              </div>
+              <span className="badge" style={{ background: `${statusCor(d.status)}20`, color: statusCor(d.status) }}>{d.status === "Assinado" ? "✅ Assinado" : "🕒 Pendente"}</span>
+              {d.status !== "Assinado" && (
+                <button onClick={() => { navigator.clipboard.writeText(`${window.location.origin}${window.location.pathname}?assinar=${d.token}`); alert("Link copiado!"); }} style={{ fontSize: 11, color: "var(--blue)", background: "transparent", border: "1px solid rgba(91,108,249,0.35)", borderRadius: 6, padding: "5px 10px", cursor: "pointer" }}>📋 Copiar Link</button>
+              )}
+              {d.status === "Assinado" && d.pdf_url && (
+                <a href={d.pdf_url} target="_blank" rel="noreferrer" style={{ fontSize: 11, color: "var(--green)", border: "1px solid var(--green)", borderRadius: 6, padding: "5px 10px", textDecoration: "none" }}>⬇ Baixar PDF</a>
+              )}
+              <button onClick={async () => { if (window.confirm("Remover este envio?")) { await documentosService.remover(d.id); carregar(); } }} style={{ fontSize: 11, color: "#f04747", background: "rgba(240,71,71,0.1)", border: "1px solid rgba(240,71,71,0.2)", borderRadius: 6, padding: "5px 9px", cursor: "pointer" }}>Remover</button>
+            </div>
+          ))}
+        </div>
+      )}
+      {modal && <NovoEnvioModal/>}
     </div>
   );
 }
@@ -4667,6 +4941,173 @@ function AccessDenied() {
 // ============================================================
 // FORMULÁRIO PÚBLICO DO CANDIDATO
 // ============================================================
+// ============================================================
+// ASSINATURA DIGITAL — página pública (celular do colaborador)
+// ============================================================
+function AssinaturaPublica({ token }) {
+  const [estado, setEstado] = React.useState("carregando"); // carregando | pronto | assinando | assinado | invalido | ja_assinado
+  const [doc, setDoc] = React.useState(null);
+  const [empresa, setEmpresa] = React.useState(null);
+  const [colab, setColab] = React.useState(null);
+  const [aceite, setAceite] = React.useState(false);
+  const canvasRef = React.useRef(null);
+  const desenhando = React.useRef(false);
+  const temTraço = React.useRef(false);
+
+  React.useEffect(() => {
+    (async () => {
+      const d = await documentosService.buscarPorToken(token);
+      if (!d) { setEstado("invalido"); return; }
+      setDoc(d);
+      const [emp, contr] = await Promise.all([
+        empresasInfoService.buscarPorId(d.empresa_id),
+        d.candidato_id ? contratacoesService.buscarPorCandidato(d.candidato_id) : Promise.resolve(null)
+      ]);
+      setEmpresa(emp || {});
+      setColab(contr || {});
+      if (d.status === "Assinado") { setEstado("ja_assinado"); } else { setEstado("pronto"); }
+    })();
+  }, [token]);
+
+  const iniciarDesenho = (e) => {
+    e.preventDefault();
+    desenhando.current = true;
+    temTraço.current = true;
+    const ctx = canvasRef.current.getContext("2d");
+    const pos = pegarPos(e);
+    ctx.beginPath();
+    ctx.moveTo(pos.x, pos.y);
+  };
+  const desenhar = (e) => {
+    if (!desenhando.current) return;
+    e.preventDefault();
+    const ctx = canvasRef.current.getContext("2d");
+    const pos = pegarPos(e);
+    ctx.lineTo(pos.x, pos.y);
+    ctx.strokeStyle = "#1a1d23"; ctx.lineWidth = 2.4; ctx.lineCap = "round"; ctx.lineJoin = "round";
+    ctx.stroke();
+  };
+  const pararDesenho = () => { desenhando.current = false; };
+  const pegarPos = (e) => {
+    const rect = canvasRef.current.getBoundingClientRect();
+    const cx = e.touches ? e.touches[0].clientX : e.clientX;
+    const cy = e.touches ? e.touches[0].clientY : e.clientY;
+    return { x: cx - rect.left, y: cy - rect.top };
+  };
+  const limparAssinatura = () => {
+    const ctx = canvasRef.current.getContext("2d");
+    ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
+    temTraço.current = false;
+  };
+
+  const confirmarAssinatura = async () => {
+    if (!temTraço.current) { alert("Assine no campo antes de confirmar."); return; }
+    if (!aceite) { alert("Você precisa marcar que leu e concorda com o documento."); return; }
+    setEstado("assinando");
+    try {
+      const assinaturaDataUrl = canvasRef.current.toDataURL("image/png");
+
+      // upload da imagem da assinatura
+      const blob = await (await fetch(assinaturaDataUrl)).blob();
+      const pathImg = `assinaturas/${token}_${Date.now()}.png`;
+      await fetch(`${SB_URL}/storage/v1/object/documentos-contratacao/${pathImg}`, {
+        method: "POST", headers: { "apikey": SB_KEY, "Authorization": `Bearer ${SB_KEY}`, "Content-Type": "image/png", "x-upsert": "true" }, body: blob
+      });
+      const assinaturaUrl = `${SB_URL}/storage/v1/object/public/documentos-contratacao/${pathImg}`;
+
+      // gera o PDF
+      const { jsPDF } = window.jspdf;
+      const pdf = new jsPDF({ unit: "mm", format: "a4" });
+      const margem = 18; let y = 22; const larguraTexto = 210 - margem * 2;
+      pdf.setFont("helvetica", "bold"); pdf.setFontSize(13);
+      pdf.text(tpl.titulo, 105, y, { align: "center" }); y += 10;
+      pdf.setFont("helvetica", "normal"); pdf.setFontSize(10.5);
+      paragrafos.forEach(p => {
+        if (y > 275) { pdf.addPage(); y = 22; }
+        if (p.startsWith("TITULO:")) {
+          pdf.setFont("helvetica", "bold"); pdf.setFontSize(11);
+          const linhas = pdf.splitTextToSize(p.replace("TITULO:", ""), larguraTexto);
+          pdf.text(linhas, margem, y); y += linhas.length * 5.5 + 2;
+          pdf.setFont("helvetica", "normal"); pdf.setFontSize(10.5);
+        } else if (p.startsWith("ITENS_BOX:")) {
+          const linhas = pdf.splitTextToSize(p.replace("ITENS_BOX:", ""), larguraTexto - 6);
+          pdf.setDrawColor(150); pdf.rect(margem, y - 4, larguraTexto, linhas.length * 5 + 6);
+          pdf.text(linhas, margem + 3, y); y += linhas.length * 5 + 10;
+        } else {
+          const linhas = pdf.splitTextToSize(p, larguraTexto);
+          pdf.text(linhas, margem, y); y += linhas.length * 5.5 + 4;
+        }
+      });
+      if (y > 230) { pdf.addPage(); y = 22; }
+      y += 6;
+      pdf.text("Assinatura:", margem, y); y += 4;
+      pdf.addImage(assinaturaDataUrl, "PNG", margem, y, 70, 28);
+      y += 32;
+      pdf.setFontSize(8.5); pdf.setTextColor(120);
+      pdf.text(`Assinado digitalmente em ${new Date().toLocaleString("pt-BR")}`, margem, y);
+
+      const pdfBlob = pdf.output("blob");
+      const pathPdf = `assinaturas/${token}_${Date.now()}.pdf`;
+      await fetch(`${SB_URL}/storage/v1/object/documentos-contratacao/${pathPdf}`, {
+        method: "POST", headers: { "apikey": SB_KEY, "Authorization": `Bearer ${SB_KEY}`, "Content-Type": "application/pdf", "x-upsert": "true" }, body: pdfBlob
+      });
+      const pdfUrl = `${SB_URL}/storage/v1/object/public/documentos-contratacao/${pathPdf}`;
+
+      await documentosService.marcarAssinado(doc.id, { assinatura_url: assinaturaUrl, pdf_url: pdfUrl });
+      setEstado("assinado");
+    } catch (e) {
+      console.error(e);
+      alert("Erro ao processar a assinatura. Tente novamente.");
+      setEstado("pronto");
+    }
+  };
+
+  if (estado === "carregando") return <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: "#1a1d23", color: "#fff" }}>Carregando...</div>;
+  if (estado === "invalido") return <div style={{ minHeight: "100vh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", background: "#1a1d23", color: "#fff", padding: 24, textAlign: "center" }}><div style={{ fontSize: 40, marginBottom: 10 }}>⚠️</div><div>Link inválido ou expirado.</div></div>;
+  if (estado === "ja_assinado" || estado === "assinado") return (
+    <div style={{ minHeight: "100vh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", background: "#1a1d23", color: "#fff", padding: 24, textAlign: "center" }}>
+      <div style={{ fontSize: 46, marginBottom: 14 }}>✅</div>
+      <div style={{ fontSize: 17, fontWeight: 700, marginBottom: 6 }}>Documento assinado com sucesso!</div>
+      <div style={{ fontSize: 13, color: "#9aa0ac" }}>Obrigado, {doc?.colaborador_nome?.split(" ")[0]}. Você já pode fechar esta página.</div>
+    </div>
+  );
+
+  const tpl = TEMPLATES_DOCUMENTOS[doc.tipo_documento];
+  const colabMerged = { ...colab, nome: doc.colaborador_nome };
+  const paragrafos = tpl.gerar(colabMerged, empresa, doc.dados_extras || {});
+
+  return (
+    <div style={{ minHeight: "100vh", background: "#f4f5f7", padding: "16px 12px 40px" }}>
+      <div style={{ maxWidth: 560, margin: "0 auto", background: "#fff", borderRadius: 12, padding: "20px 18px", boxShadow: "0 2px 12px rgba(0,0,0,0.08)" }}>
+        <div style={{ textAlign: "center", fontWeight: 800, fontSize: 15, marginBottom: 4, color: "#1a1d23" }}>{tpl.titulo}</div>
+        <div style={{ textAlign: "center", fontSize: 11, color: "#888", marginBottom: 18 }}>{empresa.nome_fantasia || empresa.nome} · {doc.colaborador_nome}</div>
+        <div style={{ fontSize: 12.5, lineHeight: 1.6, color: "#222" }}>
+          {paragrafos.map((p, i) => {
+            if (p.startsWith("TITULO:")) return <div key={i} style={{ fontWeight: 700, marginTop: 14, marginBottom: 4 }}>{p.replace("TITULO:", "")}</div>;
+            if (p.startsWith("ITENS_BOX:")) return <div key={i} style={{ whiteSpace: "pre-line", background: "#f4f5f7", border: "1px solid #ddd", borderRadius: 8, padding: 10, margin: "8px 0" }}>{p.replace("ITENS_BOX:", "")}</div>;
+            return <p key={i} style={{ margin: "0 0 10px", textAlign: "justify" }}>{p}</p>;
+          })}
+        </div>
+
+        <div style={{ marginTop: 20, marginBottom: 10, fontSize: 12, fontWeight: 700, color: "#444" }}>Assine abaixo com o dedo:</div>
+        <canvas ref={canvasRef} width={520} height={160} style={{ width: "100%", height: 160, border: "2px dashed #ccc", borderRadius: 10, touchAction: "none", background: "#fafafa" }}
+          onMouseDown={iniciarDesenho} onMouseMove={desenhar} onMouseUp={pararDesenho} onMouseLeave={pararDesenho}
+          onTouchStart={iniciarDesenho} onTouchMove={desenhar} onTouchEnd={pararDesenho}/>
+        <button onClick={limparAssinatura} style={{ marginTop: 8, fontSize: 11, color: "#666", background: "transparent", border: "1px solid #ccc", borderRadius: 6, padding: "5px 12px", cursor: "pointer" }}>🗑 Limpar assinatura</button>
+
+        <label style={{ display: "flex", alignItems: "flex-start", gap: 8, marginTop: 18, fontSize: 12, color: "#333", cursor: "pointer" }}>
+          <input type="checkbox" checked={aceite} onChange={e => setAceite(e.target.checked)} style={{ marginTop: 2 }}/>
+          Li e estou de acordo com os termos deste documento.
+        </label>
+
+        <button onClick={confirmarAssinatura} disabled={estado === "assinando"} style={{ width: "100%", marginTop: 16, background: "#22c55e", color: "#fff", border: "none", borderRadius: 10, padding: "13px", fontWeight: 800, fontSize: 14, cursor: "pointer" }}>
+          {estado === "assinando" ? "Enviando..." : "✓ Confirmar Assinatura"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function FormularioCandidato({ token }) {
   const SB_BUCKET = "documentos-contratacao";
   const [estado, setEstado] = React.useState("carregando"); // carregando | preenchendo | enviado | invalido
@@ -5041,6 +5482,8 @@ function App() {
   const params = new URLSearchParams(window.location.search);
   const tokenFormulario = params.get("formulario");
   if (tokenFormulario) return <FormularioCandidato token={tokenFormulario}/>;
+  const tokenAssinatura = params.get("assinar");
+  if (tokenAssinatura) return <AssinaturaPublica token={tokenAssinatura}/>;
 
   if (!user) return <LoginPage onLogin={handleLogin}/>;
   if (user.perfil === "master" && !empresaMaster) return <MasterDashboard onEntrarEmpresa={entrarEmpresa} onLogout={handleLogout}/>;
