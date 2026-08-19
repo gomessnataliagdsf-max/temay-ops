@@ -388,6 +388,15 @@ const TEMPLATES_DOCUMENTOS = {
 
 
 const documentosService = {
+  listarPorCandidato: async (candidatoId) => {
+    try {
+      const r = await fetch(`${SB_URL}/rest/v1/documentos_assinatura?candidato_id=eq.${candidatoId}&select=*&order=criado_em.desc`, {
+        headers: { "apikey": SB_KEY, "Authorization": `Bearer ${SB_KEY}` }
+      });
+      const data = await r.json();
+      return Array.isArray(data) ? data : [];
+    } catch (e) { console.error("[documentos.listarPorCandidato]", e); return []; }
+  },
   listarPorEmpresa: async (empresaId) => {
     try {
       const r = await fetch(`${SB_URL}/rest/v1/documentos_assinatura?empresa_id=eq.${empresaId}&select=*&order=criado_em.desc`, {
@@ -3643,6 +3652,110 @@ O link é válido por 7 dias.`);
   );
 }
 
+function DocumentosAssinadosColaborador({ candidato, empresaId, docsAssinatura, setDocsAssinatura }) {
+  const [enviando, setEnviando] = React.useState(false);
+  const [tipoDoc, setTipoDoc] = React.useState(Object.keys(TEMPLATES_DOCUMENTOS)[0]);
+  const [extras, setExtras] = React.useState({});
+  const [salvando, setSalvando] = React.useState(false);
+  const [linkGerado, setLinkGerado] = React.useState(null);
+  const base = { background: "var(--bg3)", border: "1px solid var(--border)", borderRadius: "var(--radius-sm)", color: "var(--text)", fontSize: 12, padding: "7px 9px", width: "100%", outline: "none" };
+  const tpl = TEMPLATES_DOCUMENTOS[tipoDoc];
+  const statusCor = s => s === "Assinado" ? "var(--green)" : "#faa61a";
+
+  React.useEffect(() => {
+    if (tipoDoc === "Recibo de Entrega de Uniforme") {
+      uniformesService.listarEntregas(empresaId).then(entregas => {
+        const doColab = entregas.filter(e => e.colaborador_nome === candidato.nome).slice(0, 5);
+        if (doColab.length > 0) {
+          const texto = doColab.map(e => `${e.quantidade}x ${e.tipo} - Tam. ${e.tamanho}${e.cor ? " - " + e.cor : ""} (entregue em ${fmtData(e.data_entrega)})`).join("\n");
+          setExtras(ex => ({ ...ex, itens_uniforme: texto }));
+        }
+      });
+    }
+  }, [tipoDoc]);
+
+  const enviar = async () => {
+    setSalvando(true);
+    const token = (crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).slice(2));
+    const { ok } = await documentosService.criar({
+      empresa_id: empresaId, candidato_id: String(candidato.id), colaborador_nome: candidato.nome,
+      tipo_documento: tipoDoc, dados_extras: extras, token, criado_por: ""
+    });
+    setSalvando(false);
+    if (ok) {
+      const link = `${window.location.origin}${window.location.pathname}?assinar=${token}`;
+      setLinkGerado(link);
+      setEnviando(false);
+      setExtras({});
+      documentosService.listarPorCandidato(candidato.id).then(setDocsAssinatura);
+    } else { alert("Erro ao gerar o envio."); }
+  };
+
+  return (
+    <>
+      <div className="modal-section">🖊️ Documentos para Assinatura Digital</div>
+
+      {docsAssinatura.length === 0 ? (
+        <div style={{ fontSize: 12, color: "var(--text3)", marginBottom: 12 }}>Nenhum documento enviado para assinatura ainda.</div>
+      ) : (
+        <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 12 }}>
+          {docsAssinatura.map(d => (
+            <div key={d.id} style={{ display: "flex", alignItems: "center", gap: 10, background: "var(--bg3)", border: "1px solid var(--border)", borderRadius: "var(--radius-sm)", padding: "8px 12px" }}>
+              <div style={{ flex: 1, minWidth: 0, fontSize: 12, fontWeight: 600 }}>{d.tipo_documento}</div>
+              <span className="badge" style={{ background: `${statusCor(d.status)}20`, color: statusCor(d.status), fontSize: 10 }}>{d.status === "Assinado" ? "✅ Assinado" : "🕒 Pendente"}</span>
+              {d.status !== "Assinado" && (
+                <button onClick={() => { navigator.clipboard.writeText(`${window.location.origin}${window.location.pathname}?assinar=${d.token}`); alert("Link copiado!"); }} style={{ fontSize: 10, color: "var(--blue)", background: "transparent", border: "1px solid rgba(91,108,249,0.35)", borderRadius: 6, padding: "3px 8px", cursor: "pointer" }}>📋 Link</button>
+              )}
+              {d.status === "Assinado" && d.pdf_url && (
+                <a href={d.pdf_url} target="_blank" rel="noreferrer" style={{ fontSize: 10, color: "var(--green)", border: "1px solid var(--green)", borderRadius: 6, padding: "3px 8px", textDecoration: "none" }}>⬇ PDF</a>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {!enviando ? (
+        <button onClick={() => setEnviando(true)} style={{ fontSize: 11, fontWeight: 700, color: "var(--green)", background: "var(--green-dim)", border: "1px solid var(--green)", borderRadius: 8, padding: "6px 13px", cursor: "pointer", marginBottom: 16 }}>+ Enviar Novo Documento</button>
+      ) : linkGerado ? (
+        <div style={{ background: "var(--bg3)", border: "1px solid var(--green)", borderRadius: "var(--radius-sm)", padding: 12, marginBottom: 16 }}>
+          <div style={{ fontSize: 11, color: "var(--text2)", marginBottom: 8 }}>✅ Link gerado! Envie pro colaborador assinar:</div>
+          <div style={{ fontSize: 10, wordBreak: "break-all", background: "var(--bg)", padding: 8, borderRadius: 6, marginBottom: 8 }}>{linkGerado}</div>
+          <div style={{ display: "flex", gap: 8 }}>
+            <button onClick={() => { navigator.clipboard.writeText(linkGerado); alert("Copiado!"); }} style={{ flex: 1, fontSize: 11, padding: "6px", borderRadius: 6, border: "1px solid var(--border)", background: "var(--bg)", color: "var(--text2)", cursor: "pointer" }}>📋 Copiar</button>
+            {candidato.telefone && (
+              <a href={`https://wa.me/55${candidato.telefone.replace(/\D/g,"")}?text=${encodeURIComponent("Olá! Segue o link para assinatura digital do documento: " + linkGerado)}`} target="_blank" rel="noopener noreferrer" style={{ flex: 1, fontSize: 11, padding: "6px", borderRadius: 6, background: "#25D366", color: "#fff", textAlign: "center", textDecoration: "none", fontWeight: 700 }}>WhatsApp</a>
+            )}
+            <button onClick={() => { setLinkGerado(null); }} style={{ fontSize: 11, padding: "6px 10px", borderRadius: 6, border: "1px solid var(--border)", background: "transparent", color: "var(--text3)", cursor: "pointer" }}>Fechar</button>
+          </div>
+        </div>
+      ) : (
+        <div style={{ background: "var(--bg3)", border: "1px solid var(--border)", borderRadius: "var(--radius-sm)", padding: 12, marginBottom: 16, display: "flex", flexDirection: "column", gap: 10 }}>
+          <div>
+            <label className="form-label">Documento</label>
+            <select style={base} value={tipoDoc} onChange={e => { setTipoDoc(e.target.value); setExtras({}); }}>
+              {Object.keys(TEMPLATES_DOCUMENTOS).map(t => <option key={t} value={t}>{t}</option>)}
+            </select>
+          </div>
+          {tpl.campos.map(c => (
+            <div key={c.key}>
+              <label className="form-label">{c.label}</label>
+              {c.type === "textarea" ? (
+                <textarea className="form-textarea" style={{ minHeight: 60 }} value={extras[c.key] || ""} onChange={e => setExtras(ex => ({ ...ex, [c.key]: e.target.value }))} placeholder={c.placeholder}/>
+              ) : (
+                <input type={c.type} style={base} value={extras[c.key] || ""} onChange={e => setExtras(ex => ({ ...ex, [c.key]: e.target.value }))} placeholder={c.placeholder}/>
+              )}
+            </div>
+          ))}
+          <div style={{ display: "flex", gap: 8 }}>
+            <button onClick={enviar} disabled={salvando} style={{ flex: 1, fontSize: 12, fontWeight: 700, color: "#fff", background: "var(--green)", border: "none", borderRadius: 8, padding: "8px", cursor: "pointer" }}>{salvando ? "Gerando..." : "Gerar Link"}</button>
+            <button onClick={() => setEnviando(false)} style={{ fontSize: 12, padding: "8px 12px", borderRadius: 8, border: "1px solid var(--border)", background: "transparent", color: "var(--text3)", cursor: "pointer" }}>Cancelar</button>
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
 function ContratacaoModal({ candidato, empresaId, onFechar }) {
   const SB_BUCKET = "documentos-contratacao";
 
@@ -3692,6 +3805,8 @@ function ContratacaoModal({ candidato, empresaId, onFechar }) {
   const [dragOver, setDragOver] = React.useState(false);
   const [toast, setToast] = React.useState(null);
   const [contratacaoId, setContratacaoId] = React.useState(null);
+  const [abaAtiva, setAbaAtiva] = React.useState("pessoal");
+  const [docsAssinatura, setDocsAssinatura] = React.useState([]);
   const fileInputRef = React.useRef();
 
   React.useEffect(() => {
@@ -3699,6 +3814,7 @@ function ContratacaoModal({ candidato, empresaId, onFechar }) {
     const load = async () => {
       setLoading(true);
       const existente = await contratacoesService.buscarPorCandidato(candidato.id);
+      documentosService.listarPorCandidato(candidato.id).then(setDocsAssinatura);
       if (existente) {
         setContratacaoId(existente.id);
         setDocumentos(existente.documentos || []);
@@ -3885,6 +4001,23 @@ function ContratacaoModal({ candidato, empresaId, onFechar }) {
                 </div>
               )}
 
+              {/* Barra de Abas */}
+              <div style={{ display: "flex", gap: 5, flexWrap: "wrap", margin: "14px 0 16px", borderBottom: "1px solid var(--border)", paddingBottom: 10 }}>
+                {[
+                  { id: "pessoal", label: "🪪 Dados Pessoais" },
+                  { id: "emergencia", label: "🚨 Contato de Emergência" },
+                  { id: "convenio", label: "💰 Convênio" },
+                  { id: "documentos", label: "📎 Documentos Assinados" },
+                  { id: "dependentes", label: "👨‍👩‍👧 Dependentes" },
+                  { id: "afastamento", label: "🏥 Afastamento" },
+                  { id: "ferias", label: "🏖️ Férias" },
+                  { id: "advertencias", label: "⚠️ Advertências" },
+                ].map(t => (
+                  <button key={t.id} onClick={() => setAbaAtiva(t.id)} style={{ fontSize: 11, fontWeight: 700, padding: "6px 11px", borderRadius: 7, cursor: "pointer", border: abaAtiva === t.id ? "1px solid var(--green)" : "1px solid var(--border)", background: abaAtiva === t.id ? "var(--green-dim)" : "var(--bg3)", color: abaAtiva === t.id ? "var(--green)" : "var(--text2)" }}>{t.label}</button>
+                ))}
+              </div>
+
+              {abaAtiva === "pessoal" && (<>
               {/* Tipo de Contrato */}
               <div className="modal-section">📋 Tipo de Contrato</div>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 4 }}>
@@ -3939,14 +4072,6 @@ function ContratacaoModal({ candidato, empresaId, onFechar }) {
                 <CampoContratacao form={form} onChange={handleChange} label="Agência" name="agencia" placeholder="0000"/>
                 <CampoContratacao form={form} onChange={handleChange} label="Conta" name="conta" placeholder="00000-0"/>
                 <CampoContratacao form={form} onChange={handleChange} label="Tipo de Conta" name="tipo_conta" type="select" options={["Corrente","Poupança","Conta Salário"]}/>
-              </div>
-
-              {/* Contato de Emergência */}
-              <div className="modal-section">🚨 Contato de Emergência</div>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-                <CampoContratacao form={form} onChange={handleChange} label="Nome" name="contato_emergencia_nome" placeholder="Nome completo"/>
-                <CampoContratacao form={form} onChange={handleChange} label="Parentesco" name="contato_emergencia_parentesco" placeholder="Ex: Mãe, Cônjuge, Irmão(ã)"/>
-                <CampoContratacao form={form} onChange={handleChange} label="Telefone" name="contato_emergencia_telefone" placeholder="(11) 99999-9999"/>
               </div>
 
               {/* Documentos CLT */}
@@ -4005,18 +4130,6 @@ function ContratacaoModal({ candidato, empresaId, onFechar }) {
                 </div>
               )}
 
-              {/* Dependentes */}
-              <SecaoDependentes form={form} setForm={setForm}/>
-
-              {/* Afastamento */}
-              <SecaoAfastamento form={form} setForm={setForm}/>
-
-              {/* Férias */}
-              <SecaoFerias form={form} setForm={setForm}/>
-
-              {/* Advertências */}
-              <SecaoAdvertencias form={form} setForm={setForm}/>
-
               {/* Dados contratuais */}
               <div className="modal-section">📝 Dados Contratuais</div>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
@@ -4028,7 +4141,18 @@ function ContratacaoModal({ candidato, empresaId, onFechar }) {
                 <CampoContratacao form={form} onChange={handleChange} label="Vale Condução — Volta (R$)" name="conducao_valor_volta" type="number" placeholder="Ex: 13,05"/>
                 <CampoContratacao form={form} onChange={handleChange} label="Integração de ônibus?" name="conducao_integracao" type="select" options={["Sim","Não","Parcial"]}/>
               </div>
+              </>)}
 
+              {abaAtiva === "emergencia" && (<>
+                <div className="modal-section">🚨 Contato de Emergência</div>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                  <CampoContratacao form={form} onChange={handleChange} label="Nome" name="contato_emergencia_nome" placeholder="Nome completo"/>
+                  <CampoContratacao form={form} onChange={handleChange} label="Parentesco" name="contato_emergencia_parentesco" placeholder="Ex: Mãe, Cônjuge, Irmão(ã)"/>
+                  <CampoContratacao form={form} onChange={handleChange} label="Telefone" name="contato_emergencia_telefone" placeholder="(11) 99999-9999"/>
+                </div>
+              </>)}
+
+              {abaAtiva === "convenio" && (<>
               {/* Benefícios detalhados */}
               <div className="modal-section">💰 Benefícios</div>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
@@ -4069,9 +4193,14 @@ function ContratacaoModal({ candidato, empresaId, onFechar }) {
                 })()}
                 <CampoContratacao form={form} onChange={handleChange} label="Outros benefícios / observações" name="beneficios" type="textarea" placeholder="Outros benefícios não listados acima..." span2/>
               </div>
+              </>)}
 
-              {/* Documentos */}
-              <div className="modal-section">📎 Documentos</div>
+              {abaAtiva === "documentos" && (<>
+              {/* Documentos para assinatura digital */}
+              <DocumentosAssinadosColaborador candidato={candidato} empresaId={empresaId} docsAssinatura={docsAssinatura} setDocsAssinatura={setDocsAssinatura}/>
+
+              {/* Documentos anexados (upload livre) */}
+              <div className="modal-section">📎 Documentos Anexados</div>
               <div
                 onDragOver={e => { e.preventDefault(); setDragOver(true); }}
                 onDragLeave={() => setDragOver(false)}
@@ -4098,6 +4227,12 @@ function ContratacaoModal({ candidato, empresaId, onFechar }) {
                   ))}
                 </div>
               )}
+              </>)}
+
+              {abaAtiva === "dependentes" && <SecaoDependentes form={form} setForm={setForm}/>}
+              {abaAtiva === "afastamento" && <SecaoAfastamento form={form} setForm={setForm}/>}
+              {abaAtiva === "ferias" && <SecaoFerias form={form} setForm={setForm}/>}
+              {abaAtiva === "advertencias" && <SecaoAdvertencias form={form} setForm={setForm}/>}
             </>
           )}
         </div>
