@@ -1122,7 +1122,7 @@ function SistemaEmpresa({ user, onLogout }) {
               })()}
               {page === "candidatos" && <CandidatosEmp data={{ ...data, candidatos: meusCandidatos, vagas: minhasVagas }} setData={setData} user={user} empresaId={empId} origens={origens} podeVerTudo={podeVerTudo}/>}
               {page === "vagas" && (podeEditarVagas ? <VagasEmp data={{ ...data, vagas: minhasVagas }} setData={setData} empresaId={empId} user={user}/> : <AccessDenied/>)}
-              {page === "agenda" && <AgendaEmp data={{ ...data, candidatos: meusCandidatos }}/>}
+              {page === "agenda" && <AgendaEmp data={{ ...data, candidatos: meusCandidatos }} setData={setData} empresaId={empId} origens={origens}/>}
               {page === "pipeline" && <PipelineEmp data={{ ...data, candidatos: meusCandidatos }} setData={setData} empresaId={empId} allUsuarios={allUsuarios} allEmpresas={allEmpresas} onEtapasChange={setEtapasCustom}/>}
               {page === "contratacao" && <ContratacaoEmp data={data} setData={setData} empresaId={empId} user={user}/>}
               {page === "aniversariantes" && <AniversariantesEmp data={data} empresaId={empId}/>}
@@ -2154,7 +2154,14 @@ function VagasEmp({ data, setData, empresaId }) {
 // ============================================================
 // AGENDA
 // ============================================================
-function AgendaEmp({ data }) {
+function AgendaEmp({ data, setData, empresaId, origens }) {
+  const [editando, setEditando] = React.useState(null);
+  const salvarCandidato = async (form) => {
+    const item = { nome: form.nome || "", email: form.email || "", vaga: form.vaga || "", telefone: form.telefone || "", status: form.status || "Novo", perfil: form.perfil || "", recrutador: form.recrutador || "", origem_contato: form.origem_contato || "", tipo_entrevista: form.tipo_entrevista || "", data_entrevista: form.data_entrevista || null, horario_entrevista: form.horario_entrevista || "", link_meet: form.link_meet || "", observacoes: form.observacoes || "", data: form.data || null, motivo_desistencia: form.motivo_desistencia || "" };
+    await db.patch("candidatos", editando.id, item);
+    setData(d => ({ ...d, candidatos: d.candidatos.map(c => c.id === editando.id ? { ...c, ...item } : c) }));
+    setEditando(null);
+  };
   const hoje = new Date().toISOString().split("T")[0];
   const amanha = new Date(Date.now() + 86400000).toISOString().split("T")[0];
   const semana = new Date(Date.now() + 7 * 86400000).toISOString().split("T")[0];
@@ -2169,12 +2176,12 @@ function AgendaEmp({ data }) {
     <div className="agenda-section">
       <div className="agenda-section-title"><span style={{ width: 9, height: 9, borderRadius: "50%", background: color, display: "inline-block" }}></span>{title}<span style={{ fontWeight: 400, color: "var(--text2)", fontSize: 12, marginLeft: 4 }}>({items.length})</span></div>
       {items.length === 0 ? <div style={{ padding: "10px 0", color: "var(--text3)", fontSize: 12 }}>Nenhuma entrevista</div> : items.map(c => (
-        <div className="entrevista-card" key={c.id}>
+        <div className="entrevista-card" key={c.id} onClick={() => setEditando(c)} style={{ cursor: "pointer" }}>
           <div style={{ background: "var(--green-dim)", color: "var(--green)", borderRadius: "var(--radius-sm)", padding: "7px 10px", textAlign: "center", flexShrink: 0, minWidth: 54 }}><div style={{ fontFamily: "var(--font-head)", fontWeight: 800, fontSize: 14 }}>{c.horario_entrevista || "--:--"}</div><div style={{ fontSize: 9 }}>{c.data_entrevista}</div></div>
           <div className="avatar-sm">{ini(c.nome)}</div>
-          <div style={{ flex: 1 }}><div style={{ fontWeight: 600, fontSize: 13 }}>{c.nome}</div><div style={{ fontSize: 11, color: "var(--text2)" }}>{c.vaga} · {c.recrutador || "RH"}</div>{c.link_meet && <a href={c.link_meet} target="_blank" rel="noreferrer" style={{ fontSize: 11, color: "var(--blue)" }}>🔗 Reunião</a>}</div>
+          <div style={{ flex: 1 }}><div style={{ fontWeight: 600, fontSize: 13 }}>{c.nome}</div><div style={{ fontSize: 11, color: "var(--text2)" }}>{c.vaga} · {c.recrutador || "RH"}</div>{c.link_meet && <a href={c.link_meet} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()} style={{ fontSize: 11, color: "var(--blue)" }}>🔗 Reunião</a>}</div>
           {c.telefone && (
-            <a href={`https://wa.me/55${c.telefone.replace(/\D/g,"")}`} target="_blank" rel="noopener noreferrer" title="Abrir no WhatsApp" style={{ display: "flex", alignItems: "center", color: "#25D366", textDecoration: "none", flexShrink: 0 }}>
+            <a href={`https://wa.me/55${c.telefone.replace(/\D/g,"")}`} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()} title="Abrir no WhatsApp" style={{ display: "flex", alignItems: "center", color: "#25D366", textDecoration: "none", flexShrink: 0 }}>
               <svg width="19" height="19" viewBox="0 0 24 24" fill="#25D366"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
             </a>
           )}
@@ -2190,6 +2197,7 @@ function AgendaEmp({ data }) {
       <S title="Amanhã" items={ordenar(com.filter(c => c.data_entrevista === amanha))} color="#5865f2"/>
       <S title="Esta Semana" items={ordenar(com.filter(c => c.data_entrevista > amanha && c.data_entrevista <= semana))} color="#9b84ec"/>
       {com.length === 0 && <div className="empty-state card"><div style={{ fontSize: 40, marginBottom: 10 }}>📅</div><div style={{ fontFamily: "var(--font-head)", fontWeight: 700, fontSize: 14 }}>Sem entrevistas agendadas</div></div>}
+      {editando && <FormCandidato candidato={editando} vagas={data.vagas} candidatos={data.candidatos} origens={origens || []} onSalvar={salvarCandidato} onFechar={() => setEditando(null)}/>}
     </>
   );
 }
