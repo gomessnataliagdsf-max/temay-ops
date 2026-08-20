@@ -3514,15 +3514,31 @@ function SecaoFerias({ form, setForm }) {
 // ============================================================
 // ADVERTÊNCIAS
 // ============================================================
-function SecaoAdvertencias({ form, setForm }) {
+function SecaoAdvertencias({ form, setForm, empresaId }) {
   const lista = form.advertencias || [];
-  const [novo, setNovo] = React.useState({ tipo: "", data: "", descricao: "", dias_suspensao: "" });
+  const [novo, setNovo] = React.useState({ tipo: "", data: "", descricao: "", dias_suspensao: "", anexo_url: "", anexo_nome: "" });
+  const [uploading, setUploading] = React.useState(false);
   const base = { background: "var(--bg3)", border: "1px solid var(--border)", borderRadius: "var(--radius-sm)", color: "var(--text)", fontSize: 12, padding: "7px 9px", width: "100%", outline: "none" };
+
+  const anexar = async (file) => {
+    const allowed = ["application/pdf","image/jpeg","image/png","image/webp"];
+    if (!allowed.includes(file.type)) { alert("Apenas PDF, JPG, PNG ou WebP."); return; }
+    setUploading(true);
+    try {
+      const path = `advertencias/${empresaId}/${Date.now()}_${file.name}`;
+      const up = await fetch(`${SB_URL}/storage/v1/object/documentos-contratacao/${path}`, {
+        method: "POST", headers: { "apikey": SB_KEY, "Authorization": `Bearer ${SB_KEY}`, "Content-Type": file.type, "x-upsert": "true" }, body: file
+      });
+      if (up.ok) { setNovo(n => ({ ...n, anexo_url: `${SB_URL}/storage/v1/object/public/documentos-contratacao/${path}`, anexo_nome: file.name })); }
+      else { alert("Erro ao enviar anexo."); }
+    } catch(e) { alert("Erro ao enviar anexo."); }
+    setUploading(false);
+  };
 
   const addAdvertencia = () => {
     if (!novo.tipo || !novo.data) { alert("Preencha o Tipo e a Data da advertência."); return; }
     setForm(f => ({ ...f, advertencias: [{ id: Date.now(), ...novo }, ...(f.advertencias || [])] }));
-    setNovo({ tipo: "", data: "", descricao: "", dias_suspensao: "" });
+    setNovo({ tipo: "", data: "", descricao: "", dias_suspensao: "", anexo_url: "", anexo_nome: "" });
   };
   const remAdvertencia = (id) => {
     if (!window.confirm("Remover esta advertência?")) return;
@@ -3551,6 +3567,14 @@ function SecaoAdvertencias({ form, setForm }) {
         <label className="form-label">Motivo / Descrição</label>
         <textarea className="form-textarea" style={{ resize: "vertical" }} value={novo.descricao} onChange={e => setNovo(n => ({ ...n, descricao: e.target.value }))} placeholder="Descreva o ocorrido"/>
       </div>
+      <div style={{ gridColumn: "1/-1" }}>
+        <label className="form-label">Anexo (opcional)</label>
+        <label style={{ display: "inline-flex", alignItems: "center", gap: 8, fontSize: 11, fontWeight: 700, color: "var(--blue)", border: "1px solid rgba(91,108,249,0.35)", borderRadius: 8, padding: "6px 12px", cursor: "pointer" }}>
+          📎 {uploading ? "Enviando..." : novo.anexo_nome ? "Trocar anexo" : "Anexar foto ou PDF"}
+          <input type="file" accept=".pdf,.jpg,.jpeg,.png,.webp" style={{ display: "none" }} onChange={e => e.target.files[0] && anexar(e.target.files[0])}/>
+        </label>
+        {novo.anexo_nome && <span style={{ fontSize: 11, color: "var(--text3)", marginLeft: 8 }}>✓ {novo.anexo_nome}</span>}
+      </div>
     </div>
     <div style={{ marginBottom: 14 }}>
       <button onClick={addAdvertencia} style={{ fontSize: 11, fontWeight: 700, color: "var(--green)", background: "var(--green-dim)", border: "1px solid var(--green)", borderRadius: 8, padding: "5px 12px", cursor: "pointer" }}>+ Registrar Advertência</button>
@@ -3564,6 +3588,7 @@ function SecaoAdvertencias({ form, setForm }) {
           <button onClick={() => remAdvertencia(a.id)} style={{ fontSize: 11, color: "#f04747", background: "rgba(240,71,71,0.1)", border: "1px solid rgba(240,71,71,0.2)", borderRadius: 6, padding: "2px 8px", cursor: "pointer" }}>Remover</button>
         </div>
         <div style={{ color: "var(--text3)", marginTop: 4 }}>{fmtData(a.data)}{a.descricao ? ` · ${a.descricao}` : ""}</div>
+        {a.anexo_url && <a href={a.anexo_url} target="_blank" rel="noreferrer" style={{ fontSize: 11, color: "var(--blue)", marginTop: 4, display: "inline-block" }}>📎 Ver anexo</a>}
       </div>
     ))}
   </>);
@@ -3790,7 +3815,7 @@ function ContratacaoModal({ candidato, empresaId, onFechar }) {
     is_estrangeiro: false,
     passaporte: "", pais_origem: "", rne: "", visto_tipo: "", visto_validade: "",
     // Contratuais
-    data_inicio: "", remuneracao: "", beneficios: "", unidade: "", equipe: "",
+    data_inicio: "", remuneracao: "", beneficios: "", unidade: "", equipe: "", setor: "",
     conducao_valor_ida: "", conducao_valor_volta: "", conducao_integracao: "",
     // Benefícios detalhados
     vt_valor: "", vr_valor: "",
@@ -3889,6 +3914,7 @@ function ContratacaoModal({ candidato, empresaId, onFechar }) {
           beneficios: existente.beneficios || "",
           unidade: existente.unidade || "",
           equipe: existente.equipe || "",
+          setor: existente.setor || "",
           conducao_valor: existente.conducao_valor || "",
           conducao_valor_ida: existente.conducao_valor_ida || "",
           conducao_valor_volta: existente.conducao_valor_volta || "",
@@ -4145,6 +4171,7 @@ function ContratacaoModal({ candidato, empresaId, onFechar }) {
                 <CampoContratacao form={form} onChange={handleChange} label="Remuneração (R$)" name="remuneracao" type="number" placeholder="0.00"/>
                 <CampoContratacao form={form} onChange={handleChange} label="Unidade" name="unidade" placeholder="Nome da unidade"/>
                 <CampoContratacao form={form} onChange={handleChange} label="Equipe" name="equipe" placeholder="Nome da equipe"/>
+                <CampoContratacao form={form} onChange={handleChange} label="Setor" name="setor" placeholder="Ex: Comercial, Financeiro, TI..."/>
                 <CampoContratacao form={form} onChange={handleChange} label="Vale Condução — Ida (R$)" name="conducao_valor_ida" type="number" placeholder="Ex: 13,05"/>
                 <CampoContratacao form={form} onChange={handleChange} label="Vale Condução — Volta (R$)" name="conducao_valor_volta" type="number" placeholder="Ex: 13,05"/>
                 <CampoContratacao form={form} onChange={handleChange} label="Integração de ônibus?" name="conducao_integracao" type="select" options={["Sim","Não","Parcial"]}/>
@@ -4240,7 +4267,7 @@ function ContratacaoModal({ candidato, empresaId, onFechar }) {
               {abaAtiva === "dependentes" && <SecaoDependentes form={form} setForm={setForm}/>}
               {abaAtiva === "afastamento" && <SecaoAfastamento form={form} setForm={setForm}/>}
               {abaAtiva === "ferias" && <SecaoFerias form={form} setForm={setForm}/>}
-              {abaAtiva === "advertencias" && <SecaoAdvertencias form={form} setForm={setForm}/>}
+              {abaAtiva === "advertencias" && <SecaoAdvertencias form={form} setForm={setForm} empresaId={empresaId}/>}
             </>
           )}
         </div>
@@ -4460,7 +4487,7 @@ function UsuariosEmp({ empresaId, user, minhasEmpresas }) {
 
   const salvarEdicao = async () => {
     if (!formEdit.nome || !formEdit.login) return;
-    await db.patch("sistema_usuarios", modalEdit.id, { nome: formEdit.nome, email: formEdit.email, login: formEdit.login.toLowerCase(), perfil: formEdit.perfil, acesso_financeiro: !!formEdit.acesso_financeiro });
+    await db.patch("sistema_usuarios", modalEdit.id, { nome: formEdit.nome, email: formEdit.email, login: formEdit.login.toLowerCase(), perfil: formEdit.perfil, acesso_financeiro: !!formEdit.acesso_financeiro, setor: formEdit.perfil === "gestor" ? (formEdit.setor || "") : null });
     setUsuarios(u => u.map(x => x.id === modalEdit.id ? { ...x, ...formEdit, login: formEdit.login.toLowerCase() } : x));
     setModalEdit(null);
   };
@@ -4505,7 +4532,7 @@ function UsuariosEmp({ empresaId, user, minhasEmpresas }) {
                 <div style={{ display: "flex", gap: 6 }}>
                   <button className="btn btn-ghost btn-sm" style={{ fontSize: 10, padding: "4px 7px" }} onClick={() => setModalEmpresas(u)}>🏢</button>
                   <button className="btn btn-ghost btn-sm" style={{ flex: 1, justifyContent: "center" }} onClick={() => toggleAtivo(u)}>{u.ativo ? "Desativar" : "Ativar"}</button>
-                  <button className="btn btn-ghost btn-sm" onClick={() => { setModalEdit(u); setFormEdit({ nome: u.nome, email: u.email || "", login: u.login, perfil: u.perfil, acesso_financeiro: !!u.acesso_financeiro }); }} title="Editar dados">✏️</button>
+                  <button className="btn btn-ghost btn-sm" onClick={() => { setModalEdit(u); setFormEdit({ nome: u.nome, email: u.email || "", login: u.login, perfil: u.perfil, acesso_financeiro: !!u.acesso_financeiro, setor: u.setor || "" }); }} title="Editar dados">✏️</button>
                   <button className="btn btn-ghost btn-sm" onClick={() => { setModalSenha(u); setSenhaNova(""); setMsg(""); }} title="Alterar senha">🔑</button>
                   <button className="btn btn-danger btn-sm" onClick={() => setConfirmDel(u)}><I d={IC.trash} s={11}/></button>
                 </div>
@@ -4527,6 +4554,9 @@ function UsuariosEmp({ empresaId, user, minhasEmpresas }) {
             <div className="form-row">
               <div className="form-group"><label className="form-label">Login *</label><input className="form-input" value={form.login} onChange={e => setForm(f => ({ ...f, login: e.target.value.toLowerCase() }))} placeholder="Ex: joao.silva"/><div className="form-hint">Sem espaços, letras minúsculas</div></div>
               <div className="form-group"><label className="form-label">Perfil</label><select className="form-input" value={form.perfil} onChange={e => setForm(f => ({ ...f, perfil: e.target.value }))}><option value="coordenador">Coordenador RH</option><option value="assistente">Assistente RH</option><option value="auxiliar">Auxiliar RH</option><option value="gestor">Gestor</option></select></div>
+            {form.perfil === "gestor" && (
+              <div className="form-group"><label className="form-label">Setor que este gestor gerencia</label><input className="form-input" value={form.setor||""} onChange={e => setForm(f => ({ ...f, setor: e.target.value }))} placeholder="Ex: Comercial, Financeiro, TI..."/></div>
+            )}
             </div>
             <div className="form-group"><label className="form-label">Senha inicial</label><input className="form-input" value={form.senha_hash} onChange={e => setForm(f => ({ ...f, senha_hash: e.target.value }))}/></div>
             <div className="form-group" onClick={() => setForm(f => ({ ...f, acesso_financeiro: !f.acesso_financeiro }))} style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer", padding: "9px 12px", background: form.acesso_financeiro ? "rgba(34,197,94,0.1)" : "var(--bg3)", border: `1px solid ${form.acesso_financeiro ? "var(--green)" : "var(--border)"}`, borderRadius: "var(--radius-sm)" }}>
@@ -4583,6 +4613,9 @@ function UsuariosEmp({ empresaId, user, minhasEmpresas }) {
             <div className="form-row">
               <div className="form-group"><label className="form-label">Login *</label><input className="form-input" value={formEdit.login||""} onChange={e => setFormEdit(f => ({ ...f, login: e.target.value.toLowerCase() }))}/><div className="form-hint">Sem espaços, letras minúsculas</div></div>
               <div className="form-group"><label className="form-label">Perfil</label><select className="form-input" value={formEdit.perfil||""} onChange={e => setFormEdit(f => ({ ...f, perfil: e.target.value }))}><option value="coordenador">Coordenador RH</option><option value="assistente">Assistente RH</option><option value="auxiliar">Auxiliar RH</option><option value="gestor">Gestor</option></select></div>
+            {formEdit.perfil === "gestor" && (
+              <div className="form-group"><label className="form-label">Setor que este gestor gerencia</label><input className="form-input" value={formEdit.setor||""} onChange={e => setFormEdit(f => ({ ...f, setor: e.target.value }))} placeholder="Ex: Comercial, Financeiro, TI..."/></div>
+            )}
             </div>
             <div className="form-group" onClick={() => setFormEdit(f => ({ ...f, acesso_financeiro: !f.acesso_financeiro }))} style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer", padding: "9px 12px", background: formEdit.acesso_financeiro ? "rgba(34,197,94,0.1)" : "var(--bg3)", border: `1px solid ${formEdit.acesso_financeiro ? "var(--green)" : "var(--border)"}`, borderRadius: "var(--radius-sm)" }}>
               <div style={{ width: 16, height: 16, borderRadius: 4, border: `2px solid ${formEdit.acesso_financeiro ? "var(--green)" : "var(--border)"}`, background: formEdit.acesso_financeiro ? "var(--green)" : "transparent", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
@@ -4663,6 +4696,24 @@ function GestorApp({ user, onLogout }) {
   };
 
   React.useEffect(() => { carregarSols(); }, [empId]);
+
+  const [colaboradoresSetor, setColaboradoresSetor] = React.useState([]);
+  React.useEffect(() => {
+    if (!empId) return;
+    Promise.all([
+      fetch(`${SB_URL}/rest/v1/candidatos?empresa_id=eq.${empId}&status=eq.Contratado&select=id,nome`, { headers: { "apikey": SB_KEY, "Authorization": `Bearer ${SB_KEY}` } }).then(r => r.json()),
+      contratacoesService.listarPorEmpresa(empId)
+    ]).then(([candidatos, contratacoes]) => {
+      const mapExtra = {};
+      (contratacoes || []).forEach(c => { if (c.candidato_id) mapExtra[c.candidato_id] = c; });
+      const lista = (Array.isArray(candidatos) ? candidatos : []).filter(c => {
+        if (!user.setor) return true;
+        const extra = mapExtra[c.id];
+        return extra && (extra.setor || "").trim().toLowerCase() === user.setor.trim().toLowerCase();
+      }).map(c => c.nome);
+      setColaboradoresSetor(lista);
+    });
+  }, [empId]);
 
   const STATUS_SOL = {
     aguardando_rh: { label: "Aguardando RH", cor: "#faa61a", icon: "⏳" },
@@ -4794,7 +4845,7 @@ function GestorApp({ user, onLogout }) {
           )}
         </main>
       </div>
-      {modalNova && <NovaSolicitacao user={user} empresaId={empId} empresaNome={empNome} onEnviado={() => { setModalNova(false); carregarSols(); }} onClose={() => setModalNova(false)}/>}
+      {modalNova && <NovaSolicitacao user={user} empresaId={empId} empresaNome={empNome} colaboradores={colaboradoresSetor} onEnviado={() => { setModalNova(false); carregarSols(); }} onClose={() => setModalNova(false)}/>}
 
       {confirmDelSol && (
         <div className="modal-overlay" onClick={() => setConfirmDelSol(null)}>
@@ -4814,12 +4865,28 @@ function GestorApp({ user, onLogout }) {
   );
 }
 
-function NovaSolicitacao({ user, empresaId, empresaNome, onEnviado, onClose }) {
+function NovaSolicitacao({ user, empresaId, empresaNome, colaboradores, onEnviado, onClose }) {
   const [tipo, setTipo] = React.useState("vaga");
   const [form, setForm] = React.useState({});
   const [loading, setLoading] = React.useState(false);
+  const [uploading, setUploading] = React.useState(false);
   const [ok, setOk] = React.useState(false);
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
+
+  const anexar = async (file) => {
+    const allowed = ["application/pdf","image/jpeg","image/png","image/webp"];
+    if (!allowed.includes(file.type)) { alert("Apenas PDF, JPG, PNG ou WebP."); return; }
+    setUploading(true);
+    try {
+      const path = `advertencias/${empresaId}/${Date.now()}_${file.name}`;
+      const up = await fetch(`${SB_URL}/storage/v1/object/documentos-contratacao/${path}`, {
+        method: "POST", headers: { "apikey": SB_KEY, "Authorization": `Bearer ${SB_KEY}`, "Content-Type": file.type, "x-upsert": "true" }, body: file
+      });
+      if (up.ok) { set("anexo_url", `${SB_URL}/storage/v1/object/public/documentos-contratacao/${path}`); set("anexo_nome", file.name); }
+      else { alert("Erro ao enviar anexo."); }
+    } catch(e) { alert("Erro ao enviar anexo."); }
+    setUploading(false);
+  };
 
   const enviar = async () => {
     setLoading(true);
@@ -4860,7 +4927,7 @@ function NovaSolicitacao({ user, empresaId, empresaNome, onEnviado, onClose }) {
         ) : (
           <>
             <div style={{ display: "flex", gap: 8, marginBottom: 20 }}>
-              {[["vaga","📋","Abertura de Vaga"],["desligamento","🚪","Desligamento"]].map(([v,ic,label]) => (
+              {[["vaga","📋","Abertura de Vaga"],["desligamento","🚪","Desligamento"],["advertencia","⚠️","Advertência"]].map(([v,ic,label]) => (
                 <button key={v} onClick={() => { setTipo(v); setForm({}); }}
                   style={{ flex: 1, padding: "10px 8px", borderRadius: "var(--radius-sm)", border: `2px solid ${tipo===v?"var(--green)":"var(--border)"}`, background: tipo===v?"var(--green-dim)":"var(--bg3)", color: tipo===v?"var(--green)":"var(--text2)", fontWeight: 700, fontSize: 13, cursor: "pointer" }}>
                   {ic} {label}
@@ -4910,6 +4977,41 @@ function NovaSolicitacao({ user, empresaId, empresaNome, onEnviado, onClose }) {
                 <div className="modal-actions">
                   <button className="btn btn-ghost" onClick={onClose}>Cancelar</button>
                   <button className="btn btn-primary" onClick={enviar} disabled={loading || !form.funcionario || !form.motivo || !form.data_prevista}>
+                    {loading ? "Enviando..." : "📤 Enviar Solicitação"}
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {tipo === "advertencia" && (
+              <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+                <div className="form-row">
+                  <div className="form-group">
+                    <label className="form-label">Nome do colaborador *</label>
+                    <input className="form-input" list="lista-colaboradores-setor" placeholder={colaboradores && colaboradores.length > 0 ? "Selecione o colaborador" : "Nome completo"} value={form.funcionario||""} onChange={e => set("funcionario",e.target.value)}/>
+                    <datalist id="lista-colaboradores-setor">{(colaboradores||[]).map(n => <option key={n} value={n}/>)}</datalist>
+                    {user.setor && <div style={{ fontSize: 10, color: "var(--text3)", marginTop: 4 }}>Mostrando colaboradores do setor: {user.setor}</div>}
+                  </div>
+                  <div className="form-group"><label className="form-label">Tipo de advertência *</label><select className="form-input" value={form.tipo_advertencia||""} onChange={e => set("tipo_advertencia",e.target.value)}><option value="">Selecione</option><option>Verbal</option><option>Escrita</option><option>Suspensão</option></select></div>
+                </div>
+                <div className="form-row">
+                  <div className="form-group"><label className="form-label">Data do ocorrido *</label><input className="form-input" type="date" value={form.data||""} onChange={e => set("data",e.target.value)}/></div>
+                  {form.tipo_advertencia === "Suspensão" && (
+                    <div className="form-group"><label className="form-label">Dias de suspensão</label><input className="form-input" type="number" min="1" value={form.dias_suspensao||""} onChange={e => set("dias_suspensao",e.target.value)}/></div>
+                  )}
+                </div>
+                <div className="form-group"><label className="form-label">Motivo / Descrição do ocorrido *</label><textarea className="form-input" rows={4} placeholder="Descreva o que aconteceu..." value={form.motivo||""} onChange={e => set("motivo",e.target.value)} style={{ resize: "vertical" }}/></div>
+                <div className="form-group">
+                  <label className="form-label">Anexo (opcional)</label>
+                  <label style={{ display: "inline-flex", alignItems: "center", gap: 8, fontSize: 12, fontWeight: 700, color: "var(--green)", border: "1px solid var(--green)", borderRadius: 8, padding: "8px 14px", cursor: "pointer" }}>
+                    📎 {uploading ? "Enviando..." : form.anexo_nome ? "Trocar anexo" : "Anexar foto ou PDF"}
+                    <input type="file" accept=".pdf,.jpg,.jpeg,.png,.webp" style={{ display: "none" }} onChange={e => e.target.files[0] && anexar(e.target.files[0])}/>
+                  </label>
+                  {form.anexo_nome && <div style={{ fontSize: 11, color: "var(--text3)", marginTop: 6 }}>✓ {form.anexo_nome}</div>}
+                </div>
+                <div className="modal-actions">
+                  <button className="btn btn-ghost" onClick={onClose}>Cancelar</button>
+                  <button className="btn btn-primary" onClick={enviar} disabled={loading || uploading || !form.funcionario || !form.tipo_advertencia || !form.data || !form.motivo}>
                     {loading ? "Enviando..." : "📤 Enviar Solicitação"}
                   </button>
                 </div>
@@ -4994,9 +5096,9 @@ function SolicitacoesRH({ empresaId, user, setData, data }) {
           <div key={s.id} className="card" style={{ padding: "18px 20px" }}>
             <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12, marginBottom: 12 }}>
               <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                <span style={{ fontSize: 24 }}>{s.tipo === "vaga" ? "📋" : "🚪"}</span>
+                <span style={{ fontSize: 24 }}>{s.tipo === "vaga" ? "📋" : s.tipo === "advertencia" ? "⚠️" : "🚪"}</span>
                 <div>
-                  <div style={{ fontWeight: 700, fontSize: 14 }}>{s.tipo === "vaga" ? "Abertura de Vaga" : "Desligamento"}</div>
+                  <div style={{ fontWeight: 700, fontSize: 14 }}>{s.tipo === "vaga" ? "Abertura de Vaga" : s.tipo === "advertencia" ? "Advertência" : "Desligamento"}</div>
                   <div style={{ fontSize: 12, color: "var(--text2)" }}>Gestor: <strong>{s.gestor_nome}</strong> · {new Date(s.created_at).toLocaleDateString("pt-BR")}</div>
                 </div>
               </div>
@@ -5012,6 +5114,12 @@ function SolicitacoesRH({ empresaId, user, setData, data }) {
                 {dados.salario && <div style={{ fontSize: 12 }}><span style={{ color: "var(--text3)" }}>Salário:</span> <strong>{dados.salario}</strong></div>}
                 {dados.urgencia && <div style={{ fontSize: 12 }}><span style={{ color: "var(--text3)" }}>Urgência:</span> <strong>{dados.urgencia}</strong></div>}
                 {dados.motivo && <div style={{ fontSize: 12 }}><span style={{ color: "var(--text3)" }}>Motivo:</span> <strong>{dados.motivo}</strong></div>}
+              </> : s.tipo === "advertencia" ? <>
+                {dados.funcionario && <div style={{ fontSize: 12 }}><span style={{ color: "var(--text3)" }}>Colaborador:</span> <strong>{dados.funcionario}</strong></div>}
+                {dados.tipo_advertencia && <div style={{ fontSize: 12 }}><span style={{ color: "var(--text3)" }}>Tipo:</span> <strong>{dados.tipo_advertencia}{dados.dias_suspensao ? ` (${dados.dias_suspensao}d)` : ""}</strong></div>}
+                {dados.data && <div style={{ fontSize: 12 }}><span style={{ color: "var(--text3)" }}>Data:</span> <strong>{new Date(dados.data+"T00:00:00").toLocaleDateString("pt-BR")}</strong></div>}
+                {dados.motivo && <div style={{ fontSize: 12, gridColumn: "1/-1" }}><span style={{ color: "var(--text3)" }}>Descrição:</span> {dados.motivo}</div>}
+                {dados.anexo_url && <div style={{ fontSize: 12 }}><a href={dados.anexo_url} target="_blank" rel="noreferrer" style={{ color: "var(--blue)" }}>📎 Ver anexo</a></div>}
               </> : <>
                 {dados.funcionario && <div style={{ fontSize: 12 }}><span style={{ color: "var(--text3)" }}>Funcionário:</span> <strong>{dados.funcionario}</strong></div>}
                 {dados.cargo && <div style={{ fontSize: 12 }}><span style={{ color: "var(--text3)" }}>Cargo:</span> <strong>{dados.cargo}</strong></div>}
