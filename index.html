@@ -3514,6 +3514,68 @@ function SecaoFerias({ form, setForm }) {
 // ============================================================
 // ADVERTÊNCIAS
 // ============================================================
+// ============================================================
+// PROMOÇÕES / EFETIVAÇÃO CLT
+// ============================================================
+const TIPOS_PROMOCAO = ["Efetivação CLT", "Promoção de Cargo", "Mudança de Salário", "Mudança de Setor", "Outro"];
+
+function SecaoPromocoes({ form, setForm }) {
+  const lista = form.promocoes_historico || [];
+  const [novo, setNovo] = React.useState({ tipo: "", data: "", cargo_anterior: "", cargo_novo: "", observacao: "" });
+  const base = { background: "var(--bg3)", border: "1px solid var(--border)", borderRadius: "var(--radius-sm)", color: "var(--text)", fontSize: 12, padding: "7px 9px", width: "100%", outline: "none" };
+
+  const addPromocao = () => {
+    if (!novo.tipo || !novo.data) { alert("Preencha o Tipo e a Data."); return; }
+    setForm(f => ({ ...f, promocoes_historico: [{ id: Date.now(), ...novo }, ...(f.promocoes_historico || [])] }));
+    setNovo({ tipo: "", data: "", cargo_anterior: "", cargo_novo: "", observacao: "" });
+  };
+  const remPromocao = (id) => {
+    if (!window.confirm("Remover este registro?")) return;
+    setForm(f => ({ ...f, promocoes_historico: (f.promocoes_historico || []).filter(p => p.id !== id) }));
+  };
+
+  return (
+    <>
+      <div className="modal-section">📈 Promoções / Efetivação CLT</div>
+      {form.data_inicio_estagio && (
+        <div style={{ fontSize: 12, color: "var(--text3)", marginBottom: 12 }}>🎓 Início do estágio: <strong>{fmtData(form.data_inicio_estagio)}</strong></div>
+      )}
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 8 }}>
+        <div>
+          <label className="form-label">Tipo</label>
+          <select style={base} value={novo.tipo} onChange={e => setNovo(n => ({ ...n, tipo: e.target.value }))}>
+            <option value="">Selecione</option>
+            {TIPOS_PROMOCAO.map(t => <option key={t} value={t}>{t}</option>)}
+          </select>
+        </div>
+        <div><label className="form-label">Data</label><input type="date" style={base} value={novo.data} onChange={e => setNovo(n => ({ ...n, data: e.target.value }))}/></div>
+        <div><label className="form-label">Cargo Anterior</label><input style={base} value={novo.cargo_anterior} onChange={e => setNovo(n => ({ ...n, cargo_anterior: e.target.value }))} placeholder="Ex: Estagiário Comercial"/></div>
+        <div><label className="form-label">Cargo Novo</label><input style={base} value={novo.cargo_novo} onChange={e => setNovo(n => ({ ...n, cargo_novo: e.target.value }))} placeholder="Ex: Consultor Comercial I"/></div>
+        <div style={{ gridColumn: "1/-1" }}>
+          <label className="form-label">Observação</label>
+          <textarea className="form-textarea" style={{ resize: "vertical" }} value={novo.observacao} onChange={e => setNovo(n => ({ ...n, observacao: e.target.value }))} placeholder="Detalhes adicionais (opcional)"/>
+        </div>
+      </div>
+      <div style={{ marginBottom: 14 }}>
+        <button onClick={addPromocao} style={{ fontSize: 11, fontWeight: 700, color: "var(--green)", background: "var(--green-dim)", border: "1px solid var(--green)", borderRadius: 8, padding: "5px 12px", cursor: "pointer" }}>+ Registrar</button>
+      </div>
+      {lista.length === 0 ? (
+        <div style={{ fontSize: 12, color: "var(--text3)" }}>Nenhum registro ainda.</div>
+      ) : lista.map(p => (
+        <div key={p.id} style={{ background: "var(--bg3)", border: "1px solid var(--border)", borderRadius: "var(--radius-sm)", padding: 10, marginBottom: 8, fontSize: 12 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <span style={{ fontWeight: 700 }}>{p.tipo}</span>
+            <button onClick={() => remPromocao(p.id)} style={{ fontSize: 11, color: "#f04747", background: "rgba(240,71,71,0.1)", border: "1px solid rgba(240,71,71,0.2)", borderRadius: 6, padding: "2px 8px", cursor: "pointer" }}>Remover</button>
+          </div>
+          <div style={{ color: "var(--text3)", marginTop: 4 }}>
+            {fmtData(p.data)}{p.cargo_anterior || p.cargo_novo ? ` · ${p.cargo_anterior || "—"} → ${p.cargo_novo || "—"}` : ""}{p.observacao ? ` · ${p.observacao}` : ""}
+          </div>
+        </div>
+      ))}
+    </>
+  );
+}
+
 function SecaoAdvertencias({ form, setForm, empresaId }) {
   const lista = form.advertencias || [];
   const [novo, setNovo] = React.useState({ tipo: "", data: "", descricao: "", dias_suspensao: "", anexo_url: "", anexo_nome: "" });
@@ -3815,7 +3877,8 @@ function ContratacaoModal({ candidato, empresaId, onFechar }) {
     is_estrangeiro: false,
     passaporte: "", pais_origem: "", rne: "", visto_tipo: "", visto_validade: "",
     // Contratuais
-    data_inicio: "", remuneracao: "", beneficios: "", unidade: "", equipe: "", setor: "",
+    data_inicio: "", remuneracao: "", beneficios: "", unidade: "", equipe: "", setor: "", data_inicio_estagio: "",
+    promocoes_historico: [],
     conducao_valor_ida: "", conducao_valor_volta: "", conducao_integracao: "",
     // Benefícios detalhados
     vt_valor: "", vr_valor: "",
@@ -3915,6 +3978,8 @@ function ContratacaoModal({ candidato, empresaId, onFechar }) {
           unidade: existente.unidade || "",
           equipe: existente.equipe || "",
           setor: existente.setor || "",
+          data_inicio_estagio: existente.data_inicio_estagio || "",
+          promocoes_historico: existente.promocoes_historico || [],
           conducao_valor: existente.conducao_valor || "",
           conducao_valor_ida: existente.conducao_valor_ida || "",
           conducao_valor_volta: existente.conducao_valor_volta || "",
@@ -4046,6 +4111,7 @@ function ContratacaoModal({ candidato, empresaId, onFechar }) {
                   { id: "afastamento", label: "🏥 Afastamento" },
                   { id: "ferias", label: "🏖️ Férias" },
                   { id: "advertencias", label: "⚠️ Advertências" },
+                  { id: "promocoes", label: "📈 Promoções" },
                 ].map(t => (
                   <button key={t.id} onClick={() => setAbaAtiva(t.id)} style={{ fontSize: 11, fontWeight: 700, padding: "6px 11px", borderRadius: 7, cursor: "pointer", border: abaAtiva === t.id ? "1px solid var(--green)" : "1px solid var(--border)", background: abaAtiva === t.id ? "var(--green-dim)" : "var(--bg3)", color: abaAtiva === t.id ? "var(--green)" : "var(--text2)" }}>{t.label}</button>
                 ))}
@@ -4172,6 +4238,7 @@ function ContratacaoModal({ candidato, empresaId, onFechar }) {
                 <CampoContratacao form={form} onChange={handleChange} label="Unidade" name="unidade" placeholder="Nome da unidade"/>
                 <CampoContratacao form={form} onChange={handleChange} label="Equipe" name="equipe" placeholder="Nome da equipe"/>
                 <CampoContratacao form={form} onChange={handleChange} label="Setor" name="setor" placeholder="Ex: Comercial, Financeiro, TI..."/>
+                <CampoContratacao form={form} onChange={handleChange} label="Data de Início do Estágio" name="data_inicio_estagio" type="date" placeholder="Se aplicável"/>
                 <CampoContratacao form={form} onChange={handleChange} label="Vale Condução — Ida (R$)" name="conducao_valor_ida" type="number" placeholder="Ex: 13,05"/>
                 <CampoContratacao form={form} onChange={handleChange} label="Vale Condução — Volta (R$)" name="conducao_valor_volta" type="number" placeholder="Ex: 13,05"/>
                 <CampoContratacao form={form} onChange={handleChange} label="Integração de ônibus?" name="conducao_integracao" type="select" options={["Sim","Não","Parcial"]}/>
@@ -4268,6 +4335,7 @@ function ContratacaoModal({ candidato, empresaId, onFechar }) {
               {abaAtiva === "afastamento" && <SecaoAfastamento form={form} setForm={setForm}/>}
               {abaAtiva === "ferias" && <SecaoFerias form={form} setForm={setForm}/>}
               {abaAtiva === "advertencias" && <SecaoAdvertencias form={form} setForm={setForm} empresaId={empresaId}/>}
+              {abaAtiva === "promocoes" && <SecaoPromocoes form={form} setForm={setForm}/>}
             </>
           )}
         </div>
