@@ -3877,7 +3877,7 @@ function ContratacaoModal({ candidato, empresaId, onFechar }) {
     is_estrangeiro: false,
     passaporte: "", pais_origem: "", rne: "", visto_tipo: "", visto_validade: "",
     // Contratuais
-    data_inicio: "", remuneracao: "", beneficios: "", unidade: "", equipe: "", setor: "", data_inicio_estagio: "",
+    data_inicio: "", remuneracao: "", beneficios: "", unidade: "", equipe: "", setor: "", cargo: "", data_inicio_estagio: "",
     promocoes_historico: [],
     conducao_valor_ida: "", conducao_valor_volta: "", conducao_integracao: "",
     // Benefícios detalhados
@@ -3978,6 +3978,7 @@ function ContratacaoModal({ candidato, empresaId, onFechar }) {
           unidade: existente.unidade || "",
           equipe: existente.equipe || "",
           setor: existente.setor || "",
+          cargo: existente.cargo || "",
           data_inicio_estagio: existente.data_inicio_estagio || "",
           promocoes_historico: existente.promocoes_historico || [],
           conducao_valor: existente.conducao_valor || "",
@@ -4237,6 +4238,7 @@ function ContratacaoModal({ candidato, empresaId, onFechar }) {
                 <CampoContratacao form={form} onChange={handleChange} label="Remuneração (R$)" name="remuneracao" type="number" placeholder="0.00"/>
                 <CampoContratacao form={form} onChange={handleChange} label="Unidade" name="unidade" placeholder="Nome da unidade"/>
                 <CampoContratacao form={form} onChange={handleChange} label="Equipe" name="equipe" placeholder="Nome da equipe"/>
+                <CampoContratacao form={form} onChange={handleChange} label="Cargo" name="cargo" placeholder="Ex: Consultor Comercial I"/>
                 <CampoContratacao form={form} onChange={handleChange} label="Setor" name="setor" placeholder="Ex: Comercial, Financeiro, TI..."/>
                 <CampoContratacao form={form} onChange={handleChange} label="Data de Início do Estágio" name="data_inicio_estagio" type="date" placeholder="Se aplicável"/>
                 <CampoContratacao form={form} onChange={handleChange} label="Vale Condução — Ida (R$)" name="conducao_valor_ida" type="number" placeholder="Ex: 13,05"/>
