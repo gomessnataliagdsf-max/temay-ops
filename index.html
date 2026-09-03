@@ -5912,7 +5912,7 @@ function App() {
 
   if (!user) return <LoginPage onLogin={handleLogin}/>;
   if (user.perfil === "master" && !empresaMaster) return <MasterDashboard onEntrarEmpresa={entrarEmpresa} onLogout={handleLogout}/>;
-  if (user.perfil === "gestor") return <GestorApp user={user} onLogout={handleLogout}/>;
+  if (user.perfil === "gestor" && !Array.isArray(user.paginas_permitidas)) return <GestorApp user={user} onLogout={handleLogout}/>;
   return <SistemaEmpresa user={user} onLogout={handleLogout}/>;
 }
 
