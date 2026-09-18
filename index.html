@@ -214,12 +214,20 @@ const MASTER_EMAIL = "gomessnatalia@outlook.com";
 const db = {
   get: async (table, filtros = "") => {
     const orderCol = (table === "candidatos" || table === "vagas") ? "criado_em" : "created_at";
-    const r = await fetch(`${SB_URL}/rest/v1/${table}?select=*${filtros}&order=${orderCol}.desc`, {
-      headers: { "apikey": SB_KEY, "Authorization": `Bearer ${SB_KEY}` }
-    });
-    const data = await r.json();
-    if (!Array.isArray(data)) { console.error("GET error:", table, data); return []; }
-    return data;
+    let all = [];
+    let from = 0;
+    const pageSize = 1000;
+    while (true) {
+      const r = await fetch(`${SB_URL}/rest/v1/${table}?select=*${filtros}&order=${orderCol}.desc`, {
+        headers: { "apikey": SB_KEY, "Authorization": `Bearer ${SB_KEY}`, "Range": `${from}-${from + pageSize - 1}` }
+      });
+      const data = await r.json();
+      if (!Array.isArray(data)) { console.error("GET error:", table, data); break; }
+      all = all.concat(data);
+      if (data.length < pageSize) break;
+      from += pageSize;
+    }
+    return all;
   },
   post: async (table, data) => {
     const r = await fetch(`${SB_URL}/rest/v1/${table}`, {
@@ -572,11 +580,18 @@ const contratacoesService = {
   },
   listarPorEmpresa: async (empresaId) => {
     try {
-      const r = await fetch(`${SB_URL}/rest/v1/contratacoes?empresa_id=eq.${empresaId}&select=*`, {
-        headers: { "apikey": SB_KEY, "Authorization": `Bearer ${SB_KEY}` }
-      });
-      const data = await r.json();
-      return Array.isArray(data) ? data : [];
+      let all = []; let from = 0; const pageSize = 1000;
+      while (true) {
+        const r = await fetch(`${SB_URL}/rest/v1/contratacoes?empresa_id=eq.${empresaId}&select=*`, {
+          headers: { "apikey": SB_KEY, "Authorization": `Bearer ${SB_KEY}`, "Range": `${from}-${from + pageSize - 1}` }
+        });
+        const data = await r.json();
+        if (!Array.isArray(data)) break;
+        all = all.concat(data);
+        if (data.length < pageSize) break;
+        from += pageSize;
+      }
+      return all;
     } catch (e) {
       console.error("[contratacoes.listarPorEmpresa]", e);
       return [];
