@@ -5250,12 +5250,27 @@ function SolicitacoesRH({ empresaId, user, setData, data }) {
     // Se aprovação de vaga, cria vaga automaticamente
     if (novoStatus === "aprovado" && sol.tipo === "vaga") {
       const dados = (() => { try { return JSON.parse(sol.dados); } catch(e) { return {}; } })();
-      const novaVaga = await fetch(`${SB_URL}/rest/v1/vagas`, {
+      const prioridadeMap = { "Urgente": "Alta", "Alta": "Alta", "Média": "Média", "Baixa": "Baixa" };
+      const observacoes = [dados.requisitos, dados.obs].filter(Boolean).join(" | ");
+      const resp = await fetch(`${SB_URL}/rest/v1/vagas`, {
         method: "POST",
         headers: { "apikey": SB_KEY, "Authorization": `Bearer ${SB_KEY}`, "Content-Type": "application/json", "Prefer": "return=representation" },
-        body: JSON.stringify({ titulo: dados.cargo, departamento: dados.departamento, tipo: dados.tipo_contrato, salario: dados.salario, status: "Aberta", empresa_id: empresaId, recrutador: user.nome, descricao: dados.requisitos || "", obs: dados.obs || "" })
-      }).then(r => r.json()).catch(() => []);
-      if (Array.isArray(novaVaga) && novaVaga[0]) setData(d => ({ ...d, vagas: [novaVaga[0], ...d.vagas] }));
+        body: JSON.stringify({
+          titulo: dados.cargo || "", departamento: dados.departamento || "", tipo: dados.tipo_contrato || "CLT",
+          salario: dados.salario || "", status: "Aberta", prioridade: prioridadeMap[dados.urgencia] || "Média",
+          vagas_abertas: parseInt(dados.quantidade) || 1, recrutador: user.nome, observacoes,
+          data_abertura: new Date().toISOString().split("T")[0], data_fechamento: null,
+          motivo_abertura: dados.motivo || "Solicitação do Gestor", candidatos_count: 0, empresa_id: empresaId
+        })
+      });
+      if (!resp.ok) {
+        const erroTxt = await resp.text().catch(() => "");
+        console.error("[criar vaga na aprovação]", resp.status, erroTxt);
+        alert("A solicitação foi aprovada, mas houve um erro ao criar a vaga automaticamente. Avise o suporte técnico com este código: " + resp.status);
+      } else {
+        const novaVaga = await resp.json().catch(() => []);
+        if (Array.isArray(novaVaga) && novaVaga[0]) setData(d => ({ ...d, vagas: [novaVaga[0], ...d.vagas] }));
+      }
     }
     setModalAcao(null); setObsRh(""); load();
   };
