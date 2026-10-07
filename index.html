@@ -2597,11 +2597,14 @@ function UniformesEmp({ data, empresaId, user }) {
   const [novoEstoque, setNovoEstoque] = React.useState({ tipo: "Camiseta", tamanho: "M", cor: "", quantidade: "" });
   const [salvandoEstoque, setSalvandoEstoque] = React.useState(false);
 
+  const norm = (s) => (s || "").trim().toLowerCase();
+  const mesmoItem = (a, b) => norm(a.tipo) === norm(b.tipo) && norm(a.tamanho) === norm(b.tamanho) && norm(a.cor) === norm(b.cor);
+
   const adicionarEstoque = async () => {
     const qtd = parseInt(novoEstoque.quantidade) || 0;
     if (qtd <= 0) { alert("Informe uma quantidade válida."); return; }
     setSalvandoEstoque(true);
-    const existente = estoque.find(e => e.tipo === novoEstoque.tipo && e.tamanho === novoEstoque.tamanho && (e.cor || "") === (novoEstoque.cor || ""));
+    const existente = estoque.find(e => mesmoItem(e, novoEstoque));
     if (existente) {
       await uniformesService.atualizarQuantidade(existente.id, (existente.quantidade || 0) + qtd);
     } else {
@@ -2625,7 +2628,7 @@ function UniformesEmp({ data, empresaId, user }) {
   const registrarEntrega = async () => {
     const qtd = parseInt(novaEntrega.quantidade) || 0;
     if (!novaEntrega.colaborador_nome || qtd <= 0) { alert("Informe o colaborador e uma quantidade válida."); return; }
-    const itemEstoque = estoque.find(e => e.tipo === novaEntrega.tipo && e.tamanho === novaEntrega.tamanho && (e.cor || "") === (novaEntrega.cor || ""));
+    const itemEstoque = estoque.find(e => mesmoItem(e, novaEntrega));
     const disponivel = itemEstoque ? itemEstoque.quantidade : 0;
     if (disponivel < qtd) {
       if (!window.confirm(`Estoque insuficiente (disponível: ${disponivel}). Deseja registrar mesmo assim? O estoque ficará negativo.`)) return;
@@ -2646,7 +2649,7 @@ function UniformesEmp({ data, empresaId, user }) {
   const removerEntrega = async (item) => {
     if (!window.confirm("Remover esta entrega? O estoque correspondente será devolvido.")) return;
     await uniformesService.removerEntrega(item.id);
-    const itemEstoque = estoque.find(e => e.tipo === item.tipo && e.tamanho === item.tamanho && (e.cor || "") === (item.cor || ""));
+    const itemEstoque = estoque.find(e => mesmoItem(e, item));
     if (itemEstoque) { await uniformesService.atualizarQuantidade(itemEstoque.id, (itemEstoque.quantidade || 0) + (item.quantidade || 0)); }
     carregar();
   };
